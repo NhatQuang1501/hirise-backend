@@ -28,7 +28,7 @@ class Enum(models.TextChoices):
 
 
 class Role(Enum):
-    USER = "user"
+    APPLICANT = "applicant"
     ADMIN = "admin"
     RECRUITER = "recruiter"
 
@@ -39,11 +39,17 @@ class Gender(Enum):
     OTHER = "other"
 
 
+class Currency(Enum):
+    VND = "VND"
+    USD = "USD"
+    EUR = "EUR"
+    JPY = "JPY"
+
+
 class JobStatus(Enum):
     PUBLISHED = "published"
     DRAFT = "draft"
     CLOSED = "closed"
-    EXPIRED = "expired"
 
 
 class ReportType(Enum):

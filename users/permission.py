@@ -21,8 +21,8 @@ class IsAdmin(RoleBasedPermission):
     allowed_roles = ["admin"]
 
 
-class IsUser(RoleBasedPermission):
-    allowed_roles = ["user"]
+class IsApplicant(RoleBasedPermission):
+    allowed_roles = ["applicant"]
 
 
 class IsRecruiter(RoleBasedPermission):
