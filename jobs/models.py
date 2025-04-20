@@ -105,6 +105,8 @@ class Job(models.Model):
     )
     is_salary_negotiable = models.BooleanField(default=False)
 
+    expired_date = models.DateField(blank=True)
+
     def __str__(self):
         return self.title
 
