@@ -156,6 +156,16 @@ REST_FRAMEWORK = {
     "DEFAULT_FILTER_BACKENDS": "django_filters.rest_framework.DjangoFilterBackend",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 10,
+    # Phần thêm thử nghiệm
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {"anon": "20/minute", "user": "100/minute"},
+    # Tối ưu serializer
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ],
 }
 
 SIMPLE_JWT = {
@@ -168,10 +178,24 @@ SIMPLE_JWT = {
     # "USER_ID_CLAIM": "user_id",
 }
 
+# Email settings
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL")
+
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         "LOCATION": "unique-otp",
+        "TIMEOUT": 300,  # 5 phút
+        "OPTIONS": {
+            "MAX_ENTRIES": 1000,  # Giới hạn số lượng entries
+            "CULL_FREQUENCY": 3,  # Tỷ lệ xóa khi đạt MAX_ENTRIES
+        },
     }
 }
 
@@ -188,12 +212,17 @@ CACHES = {
 # Cấu hình thời gian sống của OTP trong cache ( phút)
 OTP_EXPIRY_TIME = 5 * 60  # seconds
 
-# Email settings
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER")
-EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD")
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL")
-5
+TEMPLATE_LOADERS = (
+    (
+        "django.template.loaders.cached.Loader",
+        (
+            "django.template.loaders.filesystem.Loader",
+            "django.template.loaders.app_directories.Loader",
+        ),
+    ),
+)
+
+# Tối ưu database query
+DATABASE_ROUTERS = []
+DATABASE_OPTIONS = {"timeout": 20}
+CONN_MAX_AGE = 600  # 10 phút

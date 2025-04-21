@@ -9,5 +9,13 @@ urlpatterns = [
     path("login/", LoginView.as_view(), name="login"),
     path("logout/", LogoutView.as_view(), name="logout"),
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
-    path("applicant-profile/", UserProfileView.as_view(), name="applicant-profile"),
+    # Profile route dựa trên role của người dùng
+    path("profile/", ProfileView.as_view(), name="profile"),
+    # Specific profile routes
+    path(
+        "profile/applicant/", ApplicantProfileView.as_view(), name="applicant-profile"
+    ),
+    path(
+        "profile/recruiter/", RecruiterProfileView.as_view(), name="recruiter-profile"
+    ),
 ]
