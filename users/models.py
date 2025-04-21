@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser, Group, Permission
-from .enums import *
+from choices import *
 import uuid
 from jobs.models import Company
 
@@ -53,7 +53,11 @@ class ApplicantProfile(models.Model):
     )
 
     full_name = models.CharField(max_length=100, blank=True)
-    gender = models.CharField(max_length=10, choices=Gender.choices, blank=True)
+    gender = models.CharField(
+        max_length=10,
+        choices=Gender.choices,
+        blank=True,
+    )
     phone_number = models.CharField(max_length=20, blank=True)
 
     cv = models.FileField(upload_to="cv/", blank=True, null=True)
@@ -98,14 +102,6 @@ class RecruiterProfile(models.Model):
 
 class SocialLink(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    PLATFORM_CHOICES = [
-        ("facebook", "Facebook"),
-        ("linkedin", "LinkedIn"),
-        ("github", "GitHub"),
-        ("portfolio", "Portfolio"),
-        ("others", "Others"),
-    ]
-
     profile = models.ForeignKey(
         ApplicantProfile,
         on_delete=models.CASCADE,
@@ -113,10 +109,10 @@ class SocialLink(models.Model):
     )
     platform = models.CharField(
         max_length=50,
-        choices=PLATFORM_CHOICES,
+        choices=Platform.choices,
         on_delete=models.CASCADE,
     )
-    url = models.URLField()
+    url = models.URLField(blank=True, null=True)
     custom_label = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):

@@ -3,6 +3,8 @@ from django.contrib.auth import authenticate
 from .models import User, ApplicantProfile, RecruiterProfile
 from .enums import Role
 from .utils import get_otp_from_cache
+from django.db.models import Q
+from django.core.cache import cache
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -13,15 +15,26 @@ class RegisterSerializer(serializers.ModelSerializer):
         model = User
         fields = ["username", "email", "password", "role"]
 
-    def validate_email(self, value):
-        if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError("Email đã được sử dụng")
-        return value
+    def validate(self, data):
+        """Gộp các validation thành một query duy nhất"""
+        email = data.get("email")
+        username = data.get("username")
 
-    def validate_username(self, value):
-        if User.objects.filter(username=value).exists():
-            raise serializers.ValidationError("Tên đăng nhập đã được sử dụng")
-        return value
+        existing_user = (
+            User.objects.filter(Q(email=email) | Q(username=username))
+            .values_list("email", "username")
+            .first()
+        )
+
+        if existing_user:
+            errors = {}
+            if email == existing_user[0]:
+                errors["email"] = "Email đã được sử dụng"
+            if username == existing_user[1]:
+                errors["username"] = "Tên đăng nhập đã được sử dụng"
+            raise serializers.ValidationError(errors)
+
+        return data
 
     def create(self, validated_data):
         user = User.objects.create_user(
@@ -106,6 +119,23 @@ class ApplicantProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = ApplicantProfile
         fields = ["user", "full_name", "gender", "phone_number", "cv", "description"]
+
+    @staticmethod
+    def setup_eager_loading(queryset):
+        """Tối ưu truy vấn cho ApplicantProfile"""
+        return queryset.select_related("user").only(
+            "user__id",
+            "user__username",
+            "user__email",
+            "user__role",
+            "user__is_verified",
+            "user__created_at",
+            "full_name",
+            "gender",
+            "phone_number",
+            "cv",
+            "description",
+        )
 
 
 class RecruiterProfileSerializer(serializers.ModelSerializer):

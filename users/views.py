@@ -1,14 +1,10 @@
-from rest_framework import status, permissions
+from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import (
-    RegisterSerializer,
-    OTPVerifySerializer,
-    ResendOTPSerializer,
-    LoginSerializer,
-    UserSerializer,
-)
+from rest_framework.generics import GenericAPIView
+from .serializers import *
 from .models import User
 from .utils import (
     create_and_send_otp,
@@ -18,8 +14,23 @@ from .utils import (
 )
 
 
+class HomeView(GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = UserSerializer
+
+    def get(self, request):
+        serializer = self.get_serializer(request.user)
+        return Response(
+            {
+                "message": "Welcome to HiRise!",
+                "user": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
 class RegisterView(APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -41,7 +52,7 @@ class RegisterView(APIView):
 
 
 class OTPVerifyView(APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = OTPVerifySerializer(data=request.data)
@@ -72,7 +83,7 @@ class OTPVerifyView(APIView):
 
 
 class ResendOTPView(APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = ResendOTPSerializer(data=request.data)
@@ -101,14 +112,12 @@ class ResendOTPView(APIView):
 
 
 class LoginView(APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.validated_data["user"]
-
-            # Tạo tokens
             tokens = get_tokens_for_user(user)
 
             return Response(
@@ -124,7 +133,7 @@ class LoginView(APIView):
 
 
 class LogoutView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         try:
@@ -135,7 +144,6 @@ class LogoutView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # Đưa token vào blacklist
             token_blacklisted(refresh_token)
 
             return Response(
@@ -146,8 +154,24 @@ class LogoutView(APIView):
 
 
 class UserProfileView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         serializer = UserSerializer(request.user)
-        return Response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class ApplicantProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        serializer = ApplicantProfileSerializer(request.user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class RecruiterProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        serializer = RecruiterProfileSerializer(request.user)
+        return Response(serializer.data, status=status.HTTP_200_OK)

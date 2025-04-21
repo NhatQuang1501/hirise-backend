@@ -38,7 +38,7 @@ class JobStatus(BaseChoices):
     CLOSED = "closed", "Closed"
 
 
-class PlatformChoices(BaseChoices):
+class Platform(BaseChoices):
     FACEBOOK = "facebook", "Facebook"
     LINKEDIN = "linkedin", "LinkedIn"
     GITHUB = "github", "GitHub"
@@ -46,33 +46,30 @@ class PlatformChoices(BaseChoices):
     OTHERS = "others", "Others"
 
 
-class UserStatusChoices(BaseChoices):
+class UserStatus(BaseChoices):
     ACTIVE = "active", "Active"
     INACTIVE = "inactive", "Inactive"
     PENDING = "pending", "Pending"
     SUSPENDED = "suspended", "Suspended"
 
 
-class ApplicationStatusChoices(BaseChoices):
+class ApplicationStatus(BaseChoices):
     PENDING = "pending", "Pending Review"
     REVIEWING = "reviewing", "Under Review"
-    SHORTLISTED = "shortlisted", "Shortlisted"
     INTERVIEWED = "interviewed", "Interviewed"
     OFFERED = "offered", "Job Offered"
     ACCEPTED = "accepted", "Offer Accepted"
     REJECTED = "rejected", "Rejected"
-    WITHDRAWN = "withdrawn", "Withdrawn"
 
 
-class JobTypeChoices(BaseChoices):
+class JobType(BaseChoices):
     FULL_TIME = "full_time", "Full Time"
     PART_TIME = "part_time", "Part Time"
     CONTRACT = "contract", "Contract"
-    INTERNSHIP = "internship", "Internship"
     FREELANCE = "freelance", "Freelance"
 
 
-class ExperienceLevelChoices(BaseChoices):
+class ExperienceLevel(BaseChoices):
     INTERN = "intern", "Intern"
     FRESHER = "fresher", "Fresher"
     JUNIOR = "junior", "Junior (1-3 years)"

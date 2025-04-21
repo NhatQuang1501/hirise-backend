@@ -79,7 +79,7 @@ def create_and_send_otp(user):
         f"Kính gửi {user.username},\n\n"
         f"Cảm ơn bạn đã đăng ký tài khoản tại HiRise. Để hoàn tất việc đăng ký, vui lòng nhập mã OTP dưới đây:\n\n"
         f"{otp}\n\n"
-        "Mã OTP này có hiệu lực trong vòng 10 phút. Nếu mã hết hạn, vui lòng yêu cầu gửi lại mã OTP từ hệ thống.\n\n"
+        "Mã OTP này có hiệu lực trong vòng 5 phút. Nếu mã hết hạn, vui lòng yêu cầu gửi lại mã OTP từ hệ thống.\n\n"
         "Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email.\n\n"
         "Xin cảm ơn vì đã tin tưởng và sử dụng dịch vụ của HiRise.\n\n"
         "Trân trọng,\n"
