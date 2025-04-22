@@ -1,95 +1,80 @@
 import django_filters
-from .models import Job, JobApplication
-from users.choices import JobStatus, ApplicationStatus
-from django.db.models import Q
+from .models import Job
+from users.choices import JobStatus, JobType, ExperienceLevel
 
 
 class JobFilter(django_filters.FilterSet):
-    """Filter tùy chỉnh cho model Job"""
+    """Filter cho Job model"""
 
-    min_salary_range = django_filters.NumberFilter(
+    # Filter các trường cơ bản
+    title = django_filters.CharFilter(lookup_expr="icontains")
+    status = django_filters.ChoiceFilter(choices=JobStatus.choices)
+    job_type = django_filters.ChoiceFilter(choices=JobType.choices)
+    experience_level = django_filters.ChoiceFilter(choices=ExperienceLevel.choices)
+
+    # Filter cho mức lương
+    min_salary_gte = django_filters.NumberFilter(
         field_name="min_salary", lookup_expr="gte"
     )
-    max_salary_range = django_filters.NumberFilter(
+    max_salary_lte = django_filters.NumberFilter(
         field_name="max_salary", lookup_expr="lte"
     )
 
-    keywords = django_filters.CharFilter(method="filter_keywords")
+    # Filter cho ngày tạo/cập nhật
+    created_after = django_filters.DateFilter(
+        field_name="created_at", lookup_expr="gte"
+    )
+    created_before = django_filters.DateFilter(
+        field_name="created_at", lookup_expr="lte"
+    )
+    updated_after = django_filters.DateFilter(
+        field_name="updated_at", lookup_expr="gte"
+    )
+    updated_before = django_filters.DateFilter(
+        field_name="updated_at", lookup_expr="lte"
+    )
+
+    # Filter cho công ty
+    company = django_filters.CharFilter(
+        field_name="company__name", lookup_expr="icontains"
+    )
+    company_id = django_filters.UUIDFilter(field_name="company__id")
+
+    # Filter cho địa điểm
     location = django_filters.CharFilter(
         field_name="company__locations__city", lookup_expr="icontains"
     )
-    industry = django_filters.CharFilter(
-        field_name="company__industries__name", lookup_expr="icontains"
+    country = django_filters.CharFilter(
+        field_name="company__locations__country", lookup_expr="icontains"
     )
+
+    # Filter cho kỹ năng
     skills = django_filters.CharFilter(
         field_name="company__skills__name", lookup_expr="icontains"
     )
 
-    created_after = django_filters.DateFilter(
-        field_name="created_at", lookup_expr="gte"
-    )
-    created_before = django_filters.DateFilter(
-        field_name="created_at", lookup_expr="lte"
+    # Filter cho ngành nghề
+    industry = django_filters.CharFilter(
+        field_name="company__industries__name", lookup_expr="icontains"
     )
 
     class Meta:
         model = Job
-        fields = {
-            "status": ["exact"],
-            "job_type": ["exact"],
-            "experience_level": ["exact"],
-            "currency": ["exact"],
-            "company": ["exact"],
-        }
-
-    def filter_keywords(self, queryset, name, value):
-        """Tìm kiếm theo từ khóa trong nhiều trường"""
-        if value:
-            # Tách từ khóa bằng dấu cách và tìm kiếm
-            keywords = value.split()
-            query = Q()
-            for keyword in keywords:
-                query |= (
-                    Q(title__icontains=keyword)
-                    | Q(description__icontains=keyword)
-                    | Q(requirements__icontains=keyword)
-                    | Q(responsibilities__icontains=keyword)
-                    | Q(company__name__icontains=keyword)
-                )
-            return queryset.filter(query).distinct()
-        return queryset
-
-
-class JobApplicationFilter(django_filters.FilterSet):
-    """Filter tùy chỉnh cho model JobApplication"""
-
-    job_title = django_filters.CharFilter(
-        field_name="job__title", lookup_expr="icontains"
-    )
-    company_name = django_filters.CharFilter(
-        field_name="job__company__name", lookup_expr="icontains"
-    )
-    applicant_name = django_filters.CharFilter(method="filter_applicant_name")
-    created_after = django_filters.DateFilter(
-        field_name="created_at", lookup_expr="gte"
-    )
-    created_before = django_filters.DateFilter(
-        field_name="created_at", lookup_expr="lte"
-    )
-
-    class Meta:
-        model = JobApplication
-        fields = {
-            "status": ["exact"],
-            "job": ["exact"],
-            "applicant": ["exact"],
-        }
-
-    def filter_applicant_name(self, queryset, name, value):
-        """Tìm kiếm theo tên ứng viên"""
-        if value:
-            return queryset.filter(
-                Q(applicant__username__icontains=value)
-                | Q(applicant__applicant_profile__full_name__icontains=value)
-            )
-        return queryset
+        fields = [
+            "title",
+            "status",
+            "job_type",
+            "experience_level",
+            "min_salary_gte",
+            "max_salary_lte",
+            "created_after",
+            "created_before",
+            "updated_after",
+            "updated_before",
+            "company",
+            "company_id",
+            "location",
+            "country",
+            "skills",
+            "industry",
+        ]

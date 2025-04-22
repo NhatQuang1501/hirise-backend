@@ -1,6 +1,5 @@
 from rest_framework import permissions
 from users.choices import Role
-from jobs.models import Job
 
 
 class IsRecruiterOrReadOnly(permissions.BasePermission):
@@ -25,7 +24,7 @@ class IsRecruiterOrReadOnly(permissions.BasePermission):
         return (
             request.user.is_authenticated
             and request.user.role == Role.RECRUITER
-            and obj.company in request.user.recruiter_profile.company
+            and obj.company == request.user.recruiter_profile.company
         )
 
 
@@ -62,6 +61,10 @@ class IsApplicationOwnerOrJobRecruiter(permissions.BasePermission):
         # Nhà tuyển dụng xem và cập nhật đơn cho job của công ty họ
         if request.user.role == Role.RECRUITER:
             return obj.job.company == request.user.recruiter_profile.company
+
+        # Admin có toàn quyền
+        if request.user.role == Role.ADMIN:
+            return True
 
         return False
 
