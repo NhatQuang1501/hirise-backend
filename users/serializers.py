@@ -1,10 +1,11 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
 from .models import User, ApplicantProfile, RecruiterProfile, SocialLink
-from .enums import Role, Gender
+from .choices import Role, Gender
 from .utils import get_otp_from_cache
 from django.db.models import Q, Prefetch
 from jobs.models import Company
+from django.db import transaction
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -41,7 +42,6 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         # Sử dụng transaction để đảm bảo tính nhất quán
-        from django.db import transaction
 
         with transaction.atomic():
             user = User.objects.create_user(
@@ -66,7 +66,7 @@ class OTPVerifySerializer(serializers.Serializer):
     otp = serializers.CharField(required=True, max_length=6)
 
     def validate(self, data):
-        email = data["email"].lower()  # Chuẩn hóa email
+        email = data["email"].lower()
 
         try:
             # Chỉ lấy các trường cần thiết
@@ -95,7 +95,7 @@ class ResendOTPSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
 
     def validate_email(self, value):
-        email = value.lower()  # Chuẩn hóa email
+        email = value.lower()
         if not User.objects.filter(email=email).exists():
             raise serializers.ValidationError("Email không tồn tại")
         return email
@@ -205,7 +205,7 @@ class ApplicantProfileUpdateSerializer(serializers.ModelSerializer):
     def validate_gender(self, value):
         if value and value not in [choice[0] for choice in Gender.choices]:
             raise serializers.ValidationError(
-                f"Giới tính không hợp lệ. Vui lòng chọn: {', '.join([choice[1] for choice in Gender.choices])}"
+                f"Invalid gender. Please select: {', '.join([choice[1] for choice in Gender.choices])}"
             )
         return value
 

@@ -50,7 +50,7 @@ class JobService:
         Đóng job và từ chối tất cả đơn ứng tuyển đang chờ
         """
         if job.status == JobStatus.CLOSED:
-            raise ValueError("Job đã được đóng rồi")
+            raise ValueError("Job is closed")
 
         # Cập nhật trạng thái và ngày đóng
         job.status = JobStatus.CLOSED
@@ -62,7 +62,7 @@ class JobService:
             job=job, status__in=[ApplicationStatus.PENDING, ApplicationStatus.REVIEWING]
         )
 
-        rejection_note = "Job đã bị đóng"
+        rejection_note = "Job is closed"
         if reason:
             rejection_note += f": {reason}"
 
@@ -90,12 +90,6 @@ class JobService:
             ).count(),
             "reviewing_applications": job.applications.filter(
                 status=ApplicationStatus.REVIEWING
-            ).count(),
-            "interviewed_applications": job.applications.filter(
-                status=ApplicationStatus.INTERVIEWED
-            ).count(),
-            "offered_applications": job.applications.filter(
-                status=ApplicationStatus.OFFERED
             ).count(),
             "accepted_applications": job.applications.filter(
                 status=ApplicationStatus.ACCEPTED
@@ -140,14 +134,6 @@ class JobApplicationService:
                 ApplicationStatus.REJECTED,
             ],
             ApplicationStatus.REVIEWING: [
-                ApplicationStatus.INTERVIEWED,
-                ApplicationStatus.REJECTED,
-            ],
-            ApplicationStatus.INTERVIEWED: [
-                ApplicationStatus.OFFERED,
-                ApplicationStatus.REJECTED,
-            ],
-            ApplicationStatus.OFFERED: [
                 ApplicationStatus.ACCEPTED,
                 ApplicationStatus.REJECTED,
             ],
@@ -203,10 +189,9 @@ class JobApplicationService:
             send_mail(
                 subject=subject,
                 message=message,
-                from_email=settings.DEFAULT_FROM_EMAIL,
+                from_email=settings.EMAIL_HOST_USER,
                 recipient_list=[application.applicant.email],
                 fail_silently=False,
             )
         except Exception as e:
-            # Log error và tiếp tục
-            print(f"Lỗi gửi email: {str(e)}")
+            print(f"Error sending email: {str(e)}")

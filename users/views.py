@@ -28,7 +28,7 @@ from .utils import (
     get_tokens_for_user,
     token_blacklisted,
 )
-from .enums import Role
+from .choices import Role
 
 
 class RegisterView(APIView):
@@ -145,11 +145,11 @@ class LogoutView(APIView):
         success = token_blacklisted(refresh_token)
         if success:
             return Response(
-                {"message": "Đăng xuất thành công"}, status=status.HTTP_200_OK
+                {"message": "Logout sucessfully"}, status=status.HTTP_200_OK
             )
         else:
             return Response(
-                {"error": "Không thể đăng xuất, token không hợp lệ"},
+                {"error": "Cannot logout, invalid token"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -199,8 +199,6 @@ class ProfileMixin:
             queryset = RecruiterProfileSerializer.setup_eager_loading(queryset)
             return get_object_or_404(queryset)
         else:
-            from django.core.exceptions import PermissionDenied
-
             raise PermissionDenied("Không có quyền truy cập profile")
 
 
@@ -302,8 +300,6 @@ class RecruiterProfileView(RetrieveUpdateAPIView):
         # Kiểm tra role
         user = self.request.user
         if user.role != Role.RECRUITER:
-            from django.core.exceptions import PermissionDenied
-
             raise PermissionDenied("Bạn không phải là nhà tuyển dụng")
 
         queryset = RecruiterProfile.objects.filter(user=user)

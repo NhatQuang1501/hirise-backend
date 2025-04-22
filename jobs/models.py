@@ -1,7 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import Group, Permission
 import uuid
-from users.enums import Currency
 from users.choices import *
 from users.models import User
 

@@ -79,7 +79,7 @@ def notify_pending_applications():
             send_mail(
                 subject=subject,
                 message=message,
-                from_email=settings.DEFAULT_FROM_EMAIL,
+                from_email=settings.EMAIL_HOST_USER,
                 recipient_list=[company.email],
                 fail_silently=False,
             )

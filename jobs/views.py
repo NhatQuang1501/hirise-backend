@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Count
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from .models import Job, JobApplication
 from .serializers import (
     JobListSerializer,
@@ -134,12 +135,10 @@ class JobViewSet(JobViewMixin, viewsets.ModelViewSet):
         # Kiểm tra trạng thái hiện tại
         if job.status == JobStatus.CLOSED:
             return Response(
-                {"detail": "Job đã được đóng rồi"}, status=status.HTTP_400_BAD_REQUEST
+                {"detail": "Job has been closed"}, status=status.HTTP_400_BAD_REQUEST
             )
 
         # Cập nhật trạng thái và ngày đóng
-        from django.utils import timezone
-
         job.status = JobStatus.CLOSED
         job.closed_date = timezone.now().date()
         job.save(update_fields=["status", "closed_date", "updated_at"])
@@ -216,7 +215,7 @@ class JobApplicationViewSet(
     """
 
     queryset = JobApplication.objects.all()
-    filterset_class = JobApplicationFilter  # Sử dụng custom filter
+    filterset_class = JobApplicationFilter
     ordering_fields = ["created_at"]
     ordering = ["-created_at"]
 

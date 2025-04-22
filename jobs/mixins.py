@@ -46,7 +46,7 @@ class JobViewMixin:
         SavedJob.objects.create(user=request.user, job=job)
 
         return Response(
-            {"message": "Đã lưu job thành công"}, status=status.HTTP_201_CREATED
+            {"message": "Saved job successfully"}, status=status.HTTP_201_CREATED
         )
 
     @action(detail=True, methods=["post"], url_path="unsave")
@@ -65,13 +65,14 @@ class JobViewMixin:
         saved_job = SavedJob.objects.filter(user=request.user, job=job).first()
         if not saved_job:
             return Response(
-                {"detail": "Bạn chưa lưu job này"}, status=status.HTTP_400_BAD_REQUEST
+                {"detail": "You have not saved this job"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         saved_job.delete()
 
         return Response(
-            {"message": "Đã bỏ lưu job thành công"}, status=status.HTTP_200_OK
+            {"message": "Unsaved job successfully"}, status=status.HTTP_200_OK
         )
 
     @action(detail=True, methods=["post"], url_path="apply")

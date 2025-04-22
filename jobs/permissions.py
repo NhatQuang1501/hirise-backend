@@ -1,5 +1,5 @@
 from rest_framework import permissions
-from users.enums import Role
+from users.choices import Role
 from jobs.models import Job
 
 

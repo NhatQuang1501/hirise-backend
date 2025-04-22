@@ -344,14 +344,6 @@ class JobApplicationUpdateSerializer(serializers.ModelSerializer):
                 ApplicationStatus.REJECTED,
             ],
             ApplicationStatus.REVIEWING: [
-                ApplicationStatus.INTERVIEWED,
-                ApplicationStatus.REJECTED,
-            ],
-            ApplicationStatus.INTERVIEWED: [
-                ApplicationStatus.OFFERED,
-                ApplicationStatus.REJECTED,
-            ],
-            ApplicationStatus.OFFERED: [
                 ApplicationStatus.ACCEPTED,
                 ApplicationStatus.REJECTED,
             ],
