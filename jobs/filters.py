@@ -1,5 +1,5 @@
 import django_filters
-from .models import Job
+from jobs.models import Job
 from users.choices import JobStatus, JobType, ExperienceLevel
 
 

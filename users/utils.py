@@ -1,6 +1,9 @@
 from datetime import timedelta
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.response import Response
+from rest_framework import status
 from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 import logging
@@ -150,3 +153,24 @@ def send_email_account_unlock(user, unlocked_date):
 
     body = _create_email_template(user, subject, body_content)
     send_email_async(user, subject, body)
+
+
+class CustomPagination(PageNumberPagination):
+    page_size = 10  # Số lượng items trên mỗi trang
+    page_size_query_param = (
+        "page_size"  # Cho phép client thay đổi page_size qua query param
+    )
+    max_page_size = 100  # Giới hạn tối đa của page_size
+
+    def get_paginated_response(self, data):
+        return Response(
+            {
+                "count": self.page.paginator.count,  # Tổng số items
+                "next": self.get_next_link(),  # Link trang tiếp theo
+                "previous": self.get_previous_link(),  # Link trang trước
+                "current_page": self.page.number,  # Trang hiện tại
+                "total_pages": self.page.paginator.num_pages,  # Tổng số trang
+                "results": data,  # Dữ liệu của trang hiện tại
+            },
+            status=status.HTTP_200_OK,
+        )

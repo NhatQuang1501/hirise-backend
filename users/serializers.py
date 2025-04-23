@@ -8,8 +8,7 @@ from .utils import get_otp_from_cache
 
 # User Serializer đa năng với các trường linh hoạt
 class UserSerializer(serializers.ModelSerializer):
-    current_password = serializers.CharField(write_only=True, required=False)
-    new_password = serializers.CharField(write_only=True, required=False)
+    profile = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -20,57 +19,51 @@ class UserSerializer(serializers.ModelSerializer):
             "role",
             "is_verified",
             "is_locked",
-            "current_password",
-            "new_password",
             "created_at",
             "updated_at",
+            "profile",
         ]
-        read_only_fields = [
-            "id",
-            "email",
-            "role",
-            "is_verified",
-            "is_locked",
-            "created_at",
-            "updated_at",
-        ]
-        extra_kwargs = {"password": {"write_only": True}}
+        read_only_fields = ["id", "role", "is_verified", "is_locked"]
 
     def __init__(self, *args, **kwargs):
-        # Loại bỏ password fields nếu chỉ đọc
-        fields = kwargs.pop("fields", None)
+        # Remove profile field if not needed
+        exclude_profile = kwargs.pop("exclude_profile", False)
         super().__init__(*args, **kwargs)
+        if exclude_profile:
+            self.fields.pop("profile")
 
-        if fields is not None:
-            allowed = set(fields)
-            existing = set(self.fields)
-            for field_name in existing - allowed:
-                self.fields.pop(field_name)
+    # def get_profile(self, obj):
+    #     if obj.role == Role.ADMIN:
+    #         return None
 
-    def validate(self, data):
-        # Validation logic cho update password
-        if "new_password" in data and not data.get("current_password"):
-            raise serializers.ValidationError(
-                {"current_password": "Mật khẩu hiện tại là bắt buộc khi đổi mật khẩu"}
-            )
+    #     if obj.role == Role.APPLICANT:
+    #         profile = ApplicantProfile.objects.filter(user=obj).first()
+    #         if profile:
+    #             return ApplicantProfileSerializer(profile).data
 
-        if "current_password" in data and self.instance:
-            if not self.instance.check_password(data["current_password"]):
-                raise serializers.ValidationError(
-                    {"current_password": "Mật khẩu hiện tại không chính xác"}
-                )
+    #     if obj.role == Role.RECRUITER:
+    #         profile = RecruiterProfile.objects.filter(user=obj).first()
+    #         if profile:
+    #             return RecruiterProfileSerializer(profile).data
 
-        return data
+    #     return None
 
-    def update(self, instance, validated_data):
-        # Xử lý password nếu có
-        if "new_password" in validated_data:
-            instance.set_password(validated_data.pop("new_password"))
+    def get_profile(self, obj):
+        if not self.context.get("exclude_profile", False):
+            if obj.role == Role.APPLICANT:
+                try:
+                    profile = obj.applicant_profile
+                    return ApplicantProfileSerializer(profile).data
+                except ApplicantProfile.DoesNotExist:
+                    return None
 
-        # Loại bỏ current_password
-        validated_data.pop("current_password", None)
-
-        return super().update(instance, validated_data)
+            elif obj.role == Role.RECRUITER:
+                try:
+                    profile = obj.recruiter_profile
+                    return RecruiterProfileSerializer(profile).data
+                except RecruiterProfile.DoesNotExist:
+                    return None
+        return None
 
 
 # Serializers cho profiles

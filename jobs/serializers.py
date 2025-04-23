@@ -1,5 +1,13 @@
 from rest_framework import serializers
-from .models import Job, Company, Location, Industry, SkillTag, JobApplication, SavedJob
+from jobs.models import (
+    Job,
+    Company,
+    Location,
+    Industry,
+    SkillTag,
+    JobApplication,
+    SavedJob,
+)
 from users.choices import (
     JobStatus,
     ApplicationStatus,

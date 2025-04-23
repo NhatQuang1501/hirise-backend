@@ -2,8 +2,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
 from django.utils import timezone
-from .models import JobApplication, JobView, SavedJob
-from .serializers import JobApplicationCreateSerializer
+from jobs.models import JobApplication, JobView, SavedJob
+from jobs.serializers import JobApplicationCreateSerializer
 from users.choices import JobStatus, ApplicationStatus
 
 

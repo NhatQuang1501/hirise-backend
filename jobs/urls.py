@@ -1,38 +1,39 @@
 from django.urls import path
-from . import views
+from jobs.views.job_views import *
+from jobs.views.job_application_views import *
 
 app_name = "jobs"
 
 urlpatterns = [
     # Job endpoints
-    path("jobs/", views.JobListView.as_view(), name="job-list"),
-    path("jobs/create/", views.JobCreateView.as_view(), name="job-create"),
-    path("jobs/<uuid:id>/", views.JobDetailView.as_view(), name="job-detail"),
-    path("jobs/<uuid:id>/update/", views.JobUpdateView.as_view(), name="job-update"),
+    path("jobs/", JobListView.as_view(), name="job-list"),
+    path("jobs/create/", JobCreateView.as_view(), name="job-create"),
+    path("jobs/<uuid:id>/", JobDetailView.as_view(), name="job-detail"),
+    path("jobs/<uuid:id>/update/", JobUpdateView.as_view(), name="job-update"),
     path(
         "jobs/<uuid:id>/status/",
-        views.JobStatusUpdateView.as_view(),
+        JobStatusUpdateView.as_view(),
         name="job-status-update",
     ),
-    path("jobs/<uuid:id>/apply/", views.JobApplyView.as_view(), name="job-apply"),
-    path("jobs/<uuid:id>/save/", views.JobSaveView.as_view(), name="job-save"),
+    path("jobs/<uuid:id>/apply/", JobApplyView.as_view(), name="job-apply"),
+    path("jobs/<uuid:id>/save/", JobSaveView.as_view(), name="job-save"),
     path(
         "jobs/<uuid:id>/stats/",
-        views.JobStatisticsView.as_view(),
+        JobStatisticsView.as_view(),
         name="job-statistics",
     ),
     # Application endpoints
-    path("applications/", views.ApplicationListView.as_view(), name="application-list"),
+    path("applications/", ApplicationListView.as_view(), name="application-list"),
     path(
         "applications/<uuid:id>/",
-        views.ApplicationDetailView.as_view(),
+        ApplicationDetailView.as_view(),
         name="application-detail",
     ),
     path(
         "applications/<uuid:id>/update/",
-        views.ApplicationUpdateView.as_view(),
+        ApplicationUpdateView.as_view(),
         name="application-update",
     ),
     # SavedJob endpoints
-    path("saved-jobs/", views.SavedJobListView.as_view(), name="saved-job-list"),
+    path("saved-jobs/", SavedJobListView.as_view(), name="saved-job-list"),
 ]

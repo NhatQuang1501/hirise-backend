@@ -1,7 +1,6 @@
 from rest_framework.permissions import BasePermission
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.exceptions import AuthenticationFailed
-
 from users.choices import Role
 
 

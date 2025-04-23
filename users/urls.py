@@ -1,37 +1,14 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
-from .views import (
-    UserListView,
-    UserDetailView,
-    UserUpdateView,
-    UserProfileView,
-    ApplicantProfileDetailView,
-    RecruiterProfileDetailView,
-    ProfileUpdateView,
-    RegisterView,
-    OTPVerifyView,
-    ResendOTPView,
-    LoginView,
-    LogoutView,
-)
+from users.views.user_views import *
+from users.views.authentication_views import *
+
 
 urlpatterns = [
-    # User Endpoints
+    # User endpoints
     path("users/", UserListView.as_view(), name="user-list"),
-    path("users/<uuid:id>/", UserDetailView.as_view(), name="user-detail"),
-    path("users/me/update/", UserUpdateView.as_view(), name="user-update"),
-    path("users/me/profile/", UserProfileView.as_view(), name="user-profile"),
-    # Profile Endpoints
-    path(
-        "profiles/applicant/<uuid:user__id>/",
-        ApplicantProfileDetailView.as_view(),
-        name="applicant-profile-detail",
-    ),
-    path(
-        "profiles/recruiter/<uuid:user__id>/",
-        RecruiterProfileDetailView.as_view(),
-        name="recruiter-profile-detail",
-    ),
+    path("users/<str:id>/", UserDetailView.as_view(), name="user-detail"),
+    path("users/profile/", ProfileUpdateView.as_view(), name="profile-update"),
     path("profiles/me/update/", ProfileUpdateView.as_view(), name="profile-update"),
     # Authentication Endpoints
     path("auth/register/", RegisterView.as_view(), name="register"),

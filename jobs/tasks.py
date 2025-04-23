@@ -2,7 +2,7 @@ from celery import shared_task
 from django.utils import timezone
 from django.db.models import Q
 from datetime import timedelta
-from .models import Job, JobApplication
+from jobs.models import Job, JobApplication
 from users.choices import JobStatus, ApplicationStatus
 
 
