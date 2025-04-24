@@ -8,7 +8,7 @@ from django.db.models import Q
 from django.utils import timezone
 from django.db import transaction
 
-from jobs.models import Job, JobApplication, SavedJob
+from jobs.models import Job, JobApplication, SavedJob, JobView
 from jobs.serializers import JobSerializer, JobApplicationSerializer, SavedJobSerializer
 from jobs.filters import JobFilter
 from jobs.permissions import (
@@ -132,10 +132,6 @@ class JobDetailView(generics.RetrieveAPIView):
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
-
-        # Ghi lại lượt xem
-        from .models import JobView
-
         JobView.objects.create(
             job=instance, user=request.user if request.user.is_authenticated else None
         )

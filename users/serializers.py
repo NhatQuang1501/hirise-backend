@@ -1,9 +1,10 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django.db.models import Q
-from .models import User, ApplicantProfile, RecruiterProfile, SocialLink
-from .choices import Role
-from .utils import get_otp_from_cache
+from django.db import transaction
+from users.models import User, ApplicantProfile, RecruiterProfile, SocialLink
+from users.choices import Role
+from users.utils import get_otp_from_cache
 
 
 # User Serializer đa năng với các trường linh hoạt
@@ -155,7 +156,7 @@ class RecruiterProfileSerializer(serializers.ModelSerializer):
         from jobs.models import Company
 
         if value and not Company.objects.filter(id=value).exists():
-            raise serializers.ValidationError("Công ty không tồn tại")
+            raise serializers.ValidationError("Company does not exist")
         return value
 
     def update(self, instance, validated_data):
@@ -194,15 +195,14 @@ class RegisterSerializer(serializers.ModelSerializer):
         if existing_user:
             errors = {}
             if email == existing_user[0]:
-                errors["email"] = "Email đã được sử dụng"
+                errors["email"] = "Email has already been used"
             if username == existing_user[1]:
-                errors["username"] = "Tên đăng nhập đã được sử dụng"
+                errors["username"] = "Username has already been used"
             raise serializers.ValidationError(errors)
 
         return data
 
     def create(self, validated_data):
-        from django.db import transaction
 
         with transaction.atomic():
             user = User.objects.create_user(
@@ -213,7 +213,6 @@ class RegisterSerializer(serializers.ModelSerializer):
                 is_verified=False,
             )
 
-            # Tạo profile dựa trên role
             if user.role == Role.APPLICANT:
                 ApplicantProfile.objects.create(user=user)
             elif user.role == Role.RECRUITER:
@@ -233,20 +232,20 @@ class OTPVerifySerializer(serializers.Serializer):
                 .only("id", "email", "is_verified")
                 .get()
             )
+            if user.is_verified:
+                raise serializers.ValidationError("Account was already verified")
             stored_otp = get_otp_from_cache(data["email"])
 
             if not stored_otp:
-                raise serializers.ValidationError(
-                    "Mã OTP đã hết hạn hoặc không tồn tại"
-                )
+                raise serializers.ValidationError("OTP code has expired")
 
             if stored_otp != data["otp"]:
-                raise serializers.ValidationError("Mã OTP không hợp lệ")
+                raise serializers.ValidationError("Invalid OTP code")
 
             data["user"] = user
             return data
         except User.DoesNotExist:
-            raise serializers.ValidationError("Email không tồn tại")
+            raise serializers.ValidationError("Email does not exist")
 
 
 class ResendOTPSerializer(serializers.Serializer):
@@ -254,7 +253,7 @@ class ResendOTPSerializer(serializers.Serializer):
 
     def validate_email(self, value):
         if not User.objects.filter(email=value).exists():
-            raise serializers.ValidationError("Email không tồn tại")
+            raise serializers.ValidationError("Email does not exist")
         return value
 
 
@@ -266,14 +265,14 @@ class LoginSerializer(serializers.Serializer):
         user = authenticate(username=data["username"], password=data["password"])
 
         if not user:
-            raise serializers.ValidationError("Tên đăng nhập hoặc mật khẩu không đúng")
+            raise serializers.ValidationError("Username or password is incorrect")
 
         # Xác thực các điều kiện bổ sung
         errors = []
         if not user.is_verified:
-            errors.append("Tài khoản của bạn chưa được xác thực")
+            errors.append("Your account has not been verified")
         if user.is_locked:
-            errors.append("Tài khoản của bạn đã bị khóa")
+            errors.append("Your account has been locked")
 
         if errors:
             raise serializers.ValidationError(", ".join(errors))

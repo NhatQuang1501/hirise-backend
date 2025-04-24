@@ -1,95 +1,46 @@
-from rest_framework.permissions import BasePermission
-from rest_framework_simplejwt.authentication import JWTAuthentication
-from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.permissions import BasePermission, SAFE_METHODS
 from users.choices import Role
 
 
+class IsOwnerOrAdmin(BasePermission):
+    """Allow only owners or admins to access"""
+
+    def has_object_permission(self, request, view, obj):
+        return request.user.is_authenticated and (
+            request.user.id == obj.id or request.user.role == Role.ADMIN
+        )
+
+
 class RoleBasedPermission(BasePermission):
-    allowed_roles = []
+    allowed_role = None
 
     def has_permission(self, request, view):
-        if not request.user.is_authenticated:
-            return False
-
-        try:
-            role = get_role(request)
-            return role in self.allowed_roles
-        except AuthenticationFailed:
-            return False
-
-
-class IsAdmin(RoleBasedPermission):
-    allowed_roles = ["admin"]
+        if request.method in SAFE_METHODS:
+            return True
+        return request.user.is_authenticated and request.user.role == self.allowed_role
 
 
 class IsApplicant(RoleBasedPermission):
-    allowed_roles = ["applicant"]
+    allowed_role = Role.APPLICANT
 
 
 class IsRecruiter(RoleBasedPermission):
-    allowed_roles = ["recruiter"]
+    allowed_role = Role.RECRUITER
 
 
-def get_role(request):
-    jwt_auth = JWTAuthentication()
-    header = jwt_auth.get_header(request)
-    raw_token = jwt_auth.get_raw_token(header)
-    validated_token = jwt_auth.get_validated_token(raw_token)
-    user_role = validated_token.get("role")
-    return user_role
+class IsAdmin(RoleBasedPermission):
+    allowed_role = Role.ADMIN
 
 
-# Custom permission
-class IsOwnerOrAdmin(BasePermission):
+class IsOwnerOrReadOnly(BasePermission):
     """
-    Cho phép chỉ chủ sở hữu hoặc admin truy cập
+    Custom permission to only allow owners of a profile to edit it.
     """
 
     def has_object_permission(self, request, view, obj):
-        # Admin luôn có quyền
-        if request.user.is_staff or request.user.role == Role.ADMIN:
+        # Read permissions are allowed to any authenticated request
+        if request.method in ["GET"]:
             return True
 
-        # Người dùng chỉ có thể truy cập đối tượng của chính họ
-        return obj.id == request.user.id
-
-
-class IsUserProfile(BasePermission):
-    """
-    Cho phép chỉ chủ sở hữu profile truy cập
-    """
-
-    def has_object_permission(self, request, view, obj):
-        # Admin luôn có quyền
-        if request.user.is_staff or request.user.role == Role.ADMIN:
-            return True
-
-        # Người dùng chỉ có thể truy cập profile của chính họ
+        # Write permissions are only allowed to the owner
         return obj.user.id == request.user.id
-
-
-class IsRecruiter(BasePermission):
-    """
-    Chỉ cho phép nhà tuyển dụng thực hiện hành động
-    """
-
-    def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == Role.RECRUITER
-
-
-class IsApplicant(BasePermission):
-    """
-    Chỉ cho phép ứng viên thực hiện hành động
-    """
-
-    def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == Role.APPLICANT
-
-
-class IsAdmin(BasePermission):
-    """
-    Chỉ cho phép admin thực hiện hành động
-    """
-
-    def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == Role.ADMIN

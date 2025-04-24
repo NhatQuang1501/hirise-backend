@@ -1,163 +1,155 @@
-from rest_framework import status, generics
+from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from django.shortcuts import get_object_or_404
 from django.db.models import Q
-
+from users.utils import CustomPagination
+from users.models import User, ApplicantProfile, RecruiterProfile
 from users.serializers import (
     UserSerializer,
     ApplicantProfileSerializer,
     RecruiterProfileSerializer,
 )
-from users.models import User, ApplicantProfile, RecruiterProfile
-from users.choices import Role
-from users.permission import IsOwnerOrAdmin, IsUserProfile
-from users.utils import CustomPagination
+from users.choices import Role, Gender
+from users.permission import *
+from django.shortcuts import get_object_or_404
+from django_filters import rest_framework as filters
+from users.filters import ApplicantFilter, RecruiterFilter
 
 
-class UserListView(APIView):
-    permission_classes = [AllowAny]
+class BaseUserView(APIView):
     pagination_class = CustomPagination
+    serializer_class = UserSerializer
+    filter_backends = (filters.DjangoFilterBackend,)
+    filterset_class = None
+    profile_serializer_class = None
+    role = None
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [AllowAny()]
+        return [permission() for permission in self.permission_classes]
+
+    def get_queryset(self):
+        """Base queryset"""
+        return User.objects.filter(role=self.role)
+
+    def filter_queryset(self, queryset):
+        """Apply filtering backend"""
+        for backend in list(self.filter_backends):
+            queryset = backend().filter_queryset(self.request, queryset, self)
+        return queryset
 
     def get(self, request):
-        # Get query params
+        """List users with pagination"""
+        queryset = self.get_queryset()
+        filtered_queryset = self.filter_queryset(queryset)
+
         include_profile = (
             request.query_params.get("include_profile", "false").lower() == "true"
         )
-        search = request.query_params.get("search", "")
-        role = request.query_params.get("role", "")
 
-        # Get profile specific filters
-        gender = request.query_params.get("gender", "")
-        company = request.query_params.get("company", "")
-
-        # Base queryset
-        queryset = User.objects.all()
-
-        # Apply basic filters
-        if search:
-            queryset = queryset.filter(
-                Q(username__icontains=search) | Q(email__icontains=search)
-            )
-
-        if role:
-            queryset = queryset.filter(role=role)
-
-        # Apply profile specific filters
-        if gender:
-            if role == Role.APPLICANT:
-                applicant_ids = ApplicantProfile.objects.filter(
-                    gender=gender
-                ).values_list("user_id", flat=True)
-                queryset = queryset.filter(id__in=applicant_ids)
-            elif role == Role.RECRUITER:
-                recruiter_ids = RecruiterProfile.objects.filter(
-                    gender=gender
-                ).values_list("user_id", flat=True)
-                queryset = queryset.filter(id__in=recruiter_ids)
-
-        if company and role == Role.RECRUITER:
-            recruiter_ids = RecruiterProfile.objects.filter(
-                company__name__icontains=company
-            ).values_list("user_id", flat=True)
-            queryset = queryset.filter(id__in=recruiter_ids)
-
-        # Apply pagination
         paginator = self.pagination_class()
-        paginated_queryset = paginator.paginate_queryset(queryset, request)
+        paginated_queryset = paginator.paginate_queryset(filtered_queryset, request)
 
-        # Serialize data with profiles
-        serializer = UserSerializer(
+        serializer = self.serializer_class(
             paginated_queryset,
             many=True,
             exclude_profile=not include_profile,
             context={"request": request},
         )
 
-        # Return paginated response with status
-        response = paginator.get_paginated_response(serializer.data)
-        response.status_code = status.HTTP_200_OK
-        return response
+        return paginator.get_paginated_response(serializer.data)
 
+    def get_profile(self, user):
+        """Get profile for specific user"""
+        raise NotImplementedError("Subclasses must implement get_profile")
 
-class UserDetailView(APIView):
-    permission_classes = [AllowAny]
+    def get_object(self, pk):
+        """Get specific user by primary key"""
+        return get_object_or_404(User, pk=pk, role=self.role)
 
-    def get(self, request, pk):
-        user = get_object_or_404(User, id=pk)
-        serializer = UserSerializer(user)
+    def retrieve(self, request, pk):
+        """Get user detail with profile"""
+        user = self.get_object(pk)
+        serializer = self.serializer_class(
+            user, exclude_profile=False, context={"request": request}
+        )
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    def update_profile(self, profile, data, partial=False):
+        """Update profile with validation"""
+        serializer = self.profile_serializer_class(profile, data=data, partial=partial)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class ProfileUpdateView(APIView):
+    def update(self, request, pk, partial=False):
+        """Update user profile"""
+        user = self.get_object(pk)
+        profile = self.get_profile(user)
+
+        # Check if user is owner
+        if request.user.id != user.id:
+            return Response(
+                {"detail": "You do not have permission to perform this action."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        return self.update_profile(profile, request.data, partial=partial)
+
+
+class ApplicantView(BaseUserView):
+    role = Role.APPLICANT
+    profile_serializer_class = ApplicantProfileSerializer
+    filterset_class = ApplicantFilter
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
-        """Get current user's profile"""
-        user = request.user
-        if user.role == Role.ADMIN:
+    def get(self, request, pk=None):
+        """Handle both list and detail views"""
+        if pk:
+            return self.retrieve(request, pk)
+        return super().get(request)
+
+    def put(self, request, pk=None):
+        """Handle profile update"""
+        if not pk:
             return Response(
-                {"message": "Admin doesn't have profile"},
-                status=status.HTTP_404_NOT_FOUND,
+                {"detail": "Profile ID is required"}, status=status.HTTP_400_BAD_REQUEST
             )
+        return self.update(request, pk)
 
-        profile = None
-        if user.role == Role.APPLICANT:
-            profile = get_object_or_404(ApplicantProfile, user=user)
-            serializer = ApplicantProfileSerializer(profile)
-        else:
-            profile = get_object_or_404(RecruiterProfile, user=user)
-            serializer = RecruiterProfileSerializer(profile)
-
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    def put(self, request):
-        """Update full profile"""
-        user = request.user
-        if user.role == Role.ADMIN:
+    def patch(self, request, pk=None):
+        """Handle partial profile update"""
+        if not pk:
             return Response(
-                {"error": "Admin doesn't have profile to update"},
-                status=status.HTTP_400_BAD_REQUEST,
+                {"detail": "Profile ID is required"}, status=status.HTTP_400_BAD_REQUEST
             )
+        return self.update(request, pk, partial=True)
 
-        profile = None
-        serializer = None
-        if user.role == Role.APPLICANT:
-            profile = get_object_or_404(ApplicantProfile, user=user)
-            serializer = ApplicantProfileSerializer(profile, data=request.data)
-        else:
-            profile = get_object_or_404(RecruiterProfile, user=user)
-            serializer = RecruiterProfileSerializer(profile, data=request.data)
 
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+class RecruiterView(BaseUserView):
+    role = Role.RECRUITER
+    profile_serializer_class = RecruiterProfileSerializer
+    filterset_class = RecruiterFilter
+    permission_classes = [IsAuthenticated]
 
-    def patch(self, request):
-        """Update partial profile"""
-        user = request.user
-        if user.role == Role.ADMIN:
+    def get(self, request, pk=None):
+        if pk:
+            return self.retrieve(request, pk)
+        return super().get(request)
+
+    def put(self, request, pk=None):
+        if not pk:
             return Response(
-                {"error": "Admin doesn't have profile to update"},
-                status=status.HTTP_400_BAD_REQUEST,
+                {"detail": "Profile ID is required"}, status=status.HTTP_400_BAD_REQUEST
             )
+        return self.update(request, pk)
 
-        profile = None
-        serializer = None
-        if user.role == Role.APPLICANT:
-            profile = get_object_or_404(ApplicantProfile, user=user)
-            serializer = ApplicantProfileSerializer(
-                profile, data=request.data, partial=True
+    def patch(self, request, pk=None):
+        if not pk:
+            return Response(
+                {"detail": "Profile ID is required"}, status=status.HTTP_400_BAD_REQUEST
             )
-        else:
-            profile = get_object_or_404(RecruiterProfile, user=user)
-            serializer = RecruiterProfileSerializer(
-                profile, data=request.data, partial=True
-            )
-
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return self.update(request, pk, partial=True)

@@ -3,7 +3,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.shortcuts import get_object_or_404
-
+from django.db import transaction
 from users.serializers import (
     UserSerializer,
     RegisterSerializer,
@@ -34,7 +34,7 @@ class RegisterView(APIView):
 
             return Response(
                 {
-                    "message": "Register successfully. Kiểm tra email để lấy mã OTP, thực hiện xác thực email để sử dụng hệ thống.",
+                    "message": "Register successfully. Please check your email to verify your account.",
                     "email": user.email,
                 },
                 status=status.HTTP_201_CREATED,
@@ -52,17 +52,23 @@ class OTPVerifyView(APIView):
             user = serializer.validated_data["user"]
 
             # Xóa OTP và cập nhật trạng thái xác thực
-            delete_otp_from_cache(user.email)
-            user.is_verified = True
-            user.save(update_fields=["is_verified"])
+            try:
+                with transaction.atomic():
+                    delete_otp_from_cache(user.email)
+                    user.is_verified = True
+                    user.save(update_fields=["is_verified"])
 
-            return Response(
-                {
-                    "message": "Verify successfully. Please login with your new account.",
-                    "email": user.email,
-                },
-                status=status.HTTP_200_OK,
-            )
+                return Response(
+                    {
+                        "message": "Verify successfully. Please login with your new account.",
+                        "email": user.email,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+            except Exception as e:
+                return Response(
+                    {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -80,14 +86,14 @@ class ResendOTPView(APIView):
 
             if user.is_verified:
                 return Response(
-                    {"message": "Tài khoản đã được xác thực"},
+                    {"message": "Account already verified"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
             create_and_send_otp(user)
             return Response(
                 {
-                    "message": "Mã xác thực mới đã được gửi đến email của bạn",
+                    "message": "New OTP has been sent to your email. Please check your inbox.",
                     "email": email,
                 },
                 status=status.HTTP_200_OK,
@@ -106,22 +112,11 @@ class LoginView(APIView):
             tokens = get_tokens_for_user(user)
 
             # Lấy thông tin user và profile
-            user_data = UserSerializer(user).data
-
-            profile_data = None
-            if user.role == Role.APPLICANT:
-                profile = ApplicantProfile.objects.filter(user=user).first()
-                if profile:
-                    profile_data = ApplicantProfileSerializer(profile).data
-            elif user.role == Role.RECRUITER:
-                profile = RecruiterProfile.objects.filter(user=user).first()
-                if profile:
-                    profile_data = RecruiterProfileSerializer(profile).data
-
+            profile_data = self._get_user_profile(user)
             response_data = {
                 "refresh": tokens["refresh"],
                 "access": tokens["access"],
-                "user": user_data,
+                "user": UserSerializer(user).data,
             }
 
             if profile_data:
@@ -130,6 +125,15 @@ class LoginView(APIView):
             return Response(response_data, status=status.HTTP_200_OK)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def _get_user_profile(self, user):
+        if user.role == Role.APPLICANT:
+            profile = getattr(user, "applicant_profile", None)
+            return ApplicantProfileSerializer(profile).data if profile else None
+        elif user.role == Role.RECRUITER:
+            profile = getattr(user, "recruiter_profile", None)
+            return RecruiterProfileSerializer(profile).data if profile else None
+        return None
 
 
 class LogoutView(APIView):
@@ -143,13 +147,30 @@ class LogoutView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        success = token_blacklisted(refresh_token)
-        if success:
+        try:
+            token_blacklisted(refresh_token)
             return Response(
                 {"message": "Logout successfuly"}, status=status.HTTP_200_OK
             )
-        else:
+        except Exception:
             return Response(
-                {"error": "Cannot logout, invalid token"},
+                {"error": "Cannot logout, invalid refresh token"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+
+class HomeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(
+            {
+                "message": "Welcome to the Hirise API",
+                "user": {
+                    "username": request.user.username,
+                    "email": request.user.email,
+                    "role": request.user.role,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )

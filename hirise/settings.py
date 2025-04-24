@@ -156,12 +156,6 @@ REST_FRAMEWORK = {
     "DEFAULT_FILTER_BACKENDS": "django_filters.rest_framework.DjangoFilterBackend",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 10,
-    # Phần thêm thử nghiệm
-    "DEFAULT_THROTTLE_CLASSES": [
-        "rest_framework.throttling.AnonRateThrottle",
-        "rest_framework.throttling.UserRateThrottle",
-    ],
-    "DEFAULT_THROTTLE_RATES": {"anon": "20/minute", "user": "100/minute"},
     # Tối ưu serializer
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
@@ -221,7 +215,7 @@ TEMPLATE_LOADERS = (
     ),
 )
 
-# Tối ưu database query
+# Optimize database query
 DATABASE_ROUTERS = []
 DATABASE_OPTIONS = {"timeout": 20}
 CONN_MAX_AGE = 600  # 10 phút

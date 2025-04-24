@@ -22,6 +22,7 @@ urlpatterns = [
         JobStatisticsView.as_view(),
         name="job-statistics",
     ),
+    path("saved-jobs/", SavedJobListView.as_view(), name="saved-job-list"),
     # Application endpoints
     path("applications/", ApplicationListView.as_view(), name="application-list"),
     path(
@@ -34,6 +35,4 @@ urlpatterns = [
         ApplicationUpdateView.as_view(),
         name="application-update",
     ),
-    # SavedJob endpoints
-    path("saved-jobs/", SavedJobListView.as_view(), name="saved-job-list"),
 ]

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 # Hằng số cho OTP
 OTP_LENGTH = 6
-EMAIL_SUPPORT = "support@hirise.com"
+EMAIL_SUPPORT = "quangpbl1@gmail.com"
 HOTLINE = "0123 456 789"
 
 
@@ -80,16 +80,19 @@ def create_and_send_otp(user):
     otp = generate_otp()
     store_otp_in_cache(user.email, otp)
 
-    subject = "Mã xác thực đăng ký tài khoản HiRise"
+    subject = "Account Verification - HiRise"
     body = (
-        f"Kính gửi {user.username},\n\n"
-        f"Cảm ơn bạn đã đăng ký tài khoản tại HiRise. Để hoàn tất việc đăng ký, vui lòng nhập mã OTP dưới đây:\n\n"
+        f"Dear {user.username},\n\n"
+        f"Thank you for registering an account at HiRise. To complete your registration, please enter the OTP code below:\n\n"
         f"{otp}\n\n"
-        f"Mã OTP này có hiệu lực trong vòng {settings.OTP_EXPIRY_TIME // 60} phút. Nếu mã hết hạn, vui lòng yêu cầu gửi lại mã OTP từ hệ thống.\n\n"
-        "Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email.\n\n"
-        "Xin cảm ơn vì đã tin tưởng và sử dụng dịch vụ của HiRise.\n\n"
-        "Trân trọng,\n"
-        "Ban Quản Trị HiRise"
+        f"This OTP code is valid for {settings.OTP_EXPIRY_TIME // 60} minutes. If the code expires, please request a new OTP from the system.\n\n"
+        "If you did not make this request, please ignore this email.\n\n"
+        "Thank you for your trust and for using HiRise services. We are always here to support you.\n\n"
+        "If you need assistance, please contact us:\n"
+        f"  - Support email: {EMAIL_SUPPORT}\n"
+        f"  - Hotline: {HOTLINE}\n\n"
+        "Best regards,\n"
+        "HiRise Management Team"
     )
 
     send_email_async(user, subject, body)
@@ -116,25 +119,26 @@ def token_blacklisted(token):
 def _create_email_template(user, title, body_content):
     """Tạo template email chung"""
     return (
-        f"Kính gửi {user.username},\n\n"
+        f"Dear {user.username},\n\n"
         f"{body_content}\n\n"
-        f"Nếu bạn cần hỗ trợ, vui lòng liên hệ:\n"
-        f"  - Email hỗ trợ: {EMAIL_SUPPORT}\n"
+        "If you need assistance, please contact us:\n"
+        f"  - Support email: {EMAIL_SUPPORT}\n"
         f"  - Hotline: {HOTLINE}\n\n"
-        "Trân trọng,\n"
-        "Ban Quản Trị HiRise"
+        "Best regards,\n"
+        "HiRise Management Team"
     )
 
 
 def send_email_account_lock(user, locked_reason, locked_date, unlocked_date):
     """Gửi email thông báo khóa tài khoản"""
-    subject = "Thông báo: Tài khoản của bạn trên HiRise đã bị khóa"
-
+    subject = "Account Locked Notification - HiRise"
     body_content = (
-        f"Chúng tôi xin thông báo rằng tài khoản của bạn trên hệ thống HiRise đã bị khóa với lý do sau: {locked_reason}\n\n"
-        f"Tài khoản của bạn bị khoá trong khoảng thời gian: {locked_date.strftime('%H:%M:%S ngày %d/%m/%Y')} - {unlocked_date.strftime('%H:%M:%S ngày %d/%m/%Y')}.\n\n"
-        "Trong thời gian tài khoản bị khóa, bạn sẽ không thể đăng nhập hoặc sử dụng các chức năng của hệ thống. "
-        "Chúng tôi chân thành xin lỗi nếu điều này gây bất tiện cho bạn."
+        f"We regret to inform you that your account on the HiRise system has been locked due to the following reason: {locked_reason}. This action was taken to ensure the security of your account and the system.\n\n"
+        f"Your account has been locked from {locked_date.strftime('%H:%M:%S ngày %d/%m/%Y')} to {unlocked_date.strftime('%H:%M:%S ngày %d/%m/%Y')}.\n\n"
+        "During the lock period, you will not be able to log in or use the system's functions. "
+        "We sincerely apologize if this causes you any inconvenience.\n\n"
+        "If you believe this is an error or if you have any questions, please contact us for assistance.\n\n"
+        "Thank you for your understanding and cooperation.\n\n"
     )
 
     body = _create_email_template(user, subject, body_content)
@@ -143,12 +147,11 @@ def send_email_account_lock(user, locked_reason, locked_date, unlocked_date):
 
 def send_email_account_unlock(user, unlocked_date):
     """Gửi email thông báo mở khóa tài khoản"""
-    subject = "Thông báo: Tài khoản của bạn trên HiRise đã được mở khóa"
-
+    subject = "Account Unlocked Notification - HiRise"
     body_content = (
-        f"Chúng tôi xin thông báo rằng tài khoản của bạn trên hệ thống HiRise đã được mở khóa từ {unlocked_date.strftime('%H:%M:%S ngày %d/%m/%Y')}.\n\n"
-        "Bạn có thể đăng nhập và sử dụng các chức năng của hệ thống như bình thường. "
-        "Cảm ơn bạn đã đồng hành cùng HiRise."
+        f"Your account on the HiRise system has been unlocked from {unlocked_date.strftime('%H:%M:%S ngày %d/%m/%Y')}.\n\n"
+        "You can log in and use the system's functions as usual. "
+        "Thank you for being with HiRise.\n\n"
     )
 
     body = _create_email_template(user, subject, body_content)
@@ -160,7 +163,7 @@ class CustomPagination(PageNumberPagination):
     page_size_query_param = (
         "page_size"  # Cho phép client thay đổi page_size qua query param
     )
-    max_page_size = 100  # Giới hạn tối đa của page_size
+    max_page_size = 50  # Giới hạn tối đa của page_size
 
     def get_paginated_response(self, data):
         return Response(
