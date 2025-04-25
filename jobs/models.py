@@ -2,7 +2,7 @@ from django.db import models
 from django.contrib.auth.models import Group, Permission
 import uuid
 from users.choices import *
-from users.models import User
+from users.models import User, RecruiterProfile, ApplicantProfile
 
 
 class Location(models.Model):
@@ -89,7 +89,13 @@ class Job(models.Model):
     company = models.ForeignKey(
         Company,
         on_delete=models.CASCADE,
-        related_name="jobs",
+        related_name="company_jobs",
+    )
+    recruiter = models.ForeignKey(
+        RecruiterProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="posted_jobs",
     )
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
@@ -167,13 +173,13 @@ class SavedJob(models.Model):
 
 class JobApplication(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    applicant = models.ForeignKey(
-        User,  # Hoặc ApplicantProfile nếu muốn rõ hơn
+    job = models.ForeignKey(
+        Job,
         on_delete=models.CASCADE,
         related_name="applications",
     )
-    job = models.ForeignKey(
-        Job,
+    applicant = models.ForeignKey(
+        ApplicantProfile,
         on_delete=models.CASCADE,
         related_name="applications",
     )
@@ -186,7 +192,7 @@ class JobApplication(models.Model):
     note = models.TextField(blank=True)
 
     class Meta:
-        unique_together = ("applicant", "job")  # Tránh apply nhiều lần
+        unique_together = ("applicant", "job")
 
     def __str__(self):
         return f"{self.applicant.username} - {self.job.title}"
@@ -216,7 +222,7 @@ class CVReview(models.Model):
         on_delete=models.CASCADE,
         related_name="cv_review",
     )
-    match_score = models.FloatField()  # 0-100%
+    match_score = models.FloatField()
     summary = models.TextField(blank=True)
     reviewed_at = models.DateTimeField(auto_now_add=True)
 

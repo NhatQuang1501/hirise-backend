@@ -25,7 +25,6 @@ from users.models import User
 from users.utils import CustomPagination
 
 
-# --- Job Views ---
 class JobListView(APIView):
     """API để lấy danh sách các job"""
 
@@ -449,12 +448,6 @@ class JobStatisticsView(APIView):
             "reviewing_applications": job.applications.filter(
                 status=ApplicationStatus.REVIEWING
             ).count(),
-            "interviewed_applications": job.applications.filter(
-                status=ApplicationStatus.INTERVIEWED
-            ).count(),
-            "offered_applications": job.applications.filter(
-                status=ApplicationStatus.OFFERED
-            ).count(),
             "accepted_applications": job.applications.filter(
                 status=ApplicationStatus.ACCEPTED
             ).count(),
@@ -478,7 +471,6 @@ class JobStatisticsView(APIView):
         return Response(stats)
 
 
-# --- SavedJob Views ---
 class SavedJobListView(APIView):
     """API to get list of saved jobs"""
 
