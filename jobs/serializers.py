@@ -17,6 +17,7 @@ from users.choices import (
 )
 from users.serializers import UserSerializer
 from django.db import transaction
+from django.utils import timezone
 
 
 class LocationSerializer(serializers.ModelSerializer):
@@ -151,66 +152,67 @@ class JobSerializer(serializers.ModelSerializer):
 
         if min_salary and max_salary and min_salary > max_salary:
             raise serializers.ValidationError(
-                "Mức lương tối thiểu không thể lớn hơn mức lương tối đa"
+                "Minimum salary cannot be greater than maximum salary"
             )
 
-        # Validate status transitions
-        if self.instance and "status" in data:
-            old_status = self.instance.status
-            new_status = data["status"]
+        # Check status
+        status = data.get("status", getattr(self.instance, "status", JobStatus.DRAFT))
 
-            # Không thể thay đổi job đã đóng
-            if old_status == JobStatus.CLOSED and old_status != new_status:
-                raise serializers.ValidationError(
-                    "Không thể thay đổi trạng thái của job đã đóng"
-                )
+        # Check closed_date
+        closed_date = data.get("closed_date")
+        if closed_date:
+            today = timezone.now().date()
+            if closed_date < today:
+                raise serializers.ValidationError("Closing date cannot be in the past")
 
-            # Validate required fields when publishing
-            if new_status == JobStatus.PUBLISHED:
-                required_fields = [
-                    "title",
-                    "description",
-                    "job_type",
-                    "experience_level",
-                ]
-                for field in required_fields:
-                    if field in data:
-                        value = data.get(field)
-                    else:
-                        value = getattr(self.instance, field, None)
+        # Validate required fields when publishing
+        if status == JobStatus.PUBLISHED:
+            required_fields = ["title", "description", "job_type", "experience_level"]
+            for field in required_fields:
+                field_value = data.get(field)
+                if not field_value:
+                    # If update, check current value
+                    if self.instance:
+                        field_value = getattr(self.instance, field, None)
 
-                    if not value:
+                    if not field_value:
                         raise serializers.ValidationError(
-                            f"Trường '{field}' là bắt buộc khi đăng job"
+                            f"Field '{field}' is required when publishing a job"
                         )
+
+        # Handle when editing a published job
+        if (
+            self.instance
+            and self.instance.status == JobStatus.PUBLISHED
+            and not status == JobStatus.CLOSED
+        ):
+            # For PUT/PATCH requests, if status is not provided, job will return to DRAFT
+            if not self.partial or "status" not in data:
+                data["status"] = JobStatus.DRAFT
+
+        # Cannot update closed job
+        if self.instance and self.instance.status == JobStatus.CLOSED:
+            raise serializers.ValidationError("Cannot update a closed job")
 
         return data
 
     def create(self, validated_data):
-        # Đảm bảo mặc định là draft
-        status = validated_data.get("status", JobStatus.DRAFT)
-        if not status:
-            validated_data["status"] = JobStatus.DRAFT
-
-        # Company sẽ được gán trong view
+        # Tạo job với status đã được validate
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        # Không thể cập nhật job đã đóng
-        if instance.status == JobStatus.CLOSED:
-            raise serializers.ValidationError("Không thể cập nhật job đã đóng")
-
         # Cập nhật closed_date khi chuyển sang CLOSED
         if (
             validated_data.get("status") == JobStatus.CLOSED
             and instance.status != JobStatus.CLOSED
         ):
-            from django.utils import timezone
-
             validated_data["closed_date"] = timezone.now().date()
 
             # Từ chối các đơn ứng tuyển chưa xử lý
             self._reject_pending_applications(instance)
+
+        # Đối với job published, nếu chỉnh sửa sẽ tự động chuyển về draft
+        # (Đã xử lý ở validate)
 
         return super().update(instance, validated_data)
 

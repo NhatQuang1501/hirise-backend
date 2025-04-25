@@ -1,5 +1,5 @@
 from rest_framework import permissions
-from users.choices import Role
+from users.choices import Role, JobStatus
 
 
 class IsRecruiterOrReadOnly(permissions.BasePermission):
@@ -40,6 +40,48 @@ class IsJobOwner(permissions.BasePermission):
 
         # Kiểm tra xem nhà tuyển dụng có thuộc công ty sở hữu job không
         return obj.company == request.user.recruiter_profile.company
+
+
+class IsJobCreator(permissions.BasePermission):
+    """
+    Chỉ cho phép người tạo job chỉnh sửa hoặc xóa job đó.
+    """
+
+    def has_object_permission(self, request, view, obj):
+        # Chỉ người tạo job mới có quyền chỉnh sửa hoặc xóa
+        return (
+            request.user.is_authenticated
+            and request.user.role == Role.RECRUITER
+            and obj.company == request.user.recruiter_profile.company
+        )
+
+
+class CanViewJob(permissions.BasePermission):
+    """
+    Quyền xem job dựa trên trạng thái.
+    Job DRAFT chỉ có thể được xem bởi người tạo hoặc admin.
+    Job PUBLISHED và CLOSED có thể được xem bởi tất cả mọi người.
+    """
+
+    def has_object_permission(self, request, view, obj):
+        # Admin luôn có quyền xem
+        if request.user.is_authenticated and request.user.role == Role.ADMIN:
+            return True
+
+        # Nhà tuyển dụng sở hữu job luôn có quyền xem
+        if (
+            request.user.is_authenticated
+            and request.user.role == Role.RECRUITER
+            and obj.company == request.user.recruiter_profile.company
+        ):
+            return True
+
+        # Nếu job là DRAFT, chỉ owner mới xem được (đã xử lý ở trên)
+        if obj.status == JobStatus.DRAFT:
+            return False
+
+        # Các job khác có thể xem bởi mọi người
+        return True
 
 
 class IsApplicationOwnerOrJobRecruiter(permissions.BasePermission):

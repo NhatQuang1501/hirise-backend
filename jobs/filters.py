@@ -1,18 +1,18 @@
 import django_filters
-from jobs.models import Job
+from .models import Job
 from users.choices import JobStatus, JobType, ExperienceLevel
 
 
 class JobFilter(django_filters.FilterSet):
-    """Filter cho Job model"""
+    """Filter for Job model"""
 
-    # Filter các trường cơ bản
+    # Basic field filters
     title = django_filters.CharFilter(lookup_expr="icontains")
     status = django_filters.ChoiceFilter(choices=JobStatus.choices)
     job_type = django_filters.ChoiceFilter(choices=JobType.choices)
     experience_level = django_filters.ChoiceFilter(choices=ExperienceLevel.choices)
 
-    # Filter cho mức lương
+    # Salary filters
     min_salary_gte = django_filters.NumberFilter(
         field_name="min_salary", lookup_expr="gte"
     )
@@ -20,7 +20,7 @@ class JobFilter(django_filters.FilterSet):
         field_name="max_salary", lookup_expr="lte"
     )
 
-    # Filter cho ngày tạo/cập nhật
+    # Date filters
     created_after = django_filters.DateFilter(
         field_name="created_at", lookup_expr="gte"
     )
@@ -34,13 +34,13 @@ class JobFilter(django_filters.FilterSet):
         field_name="updated_at", lookup_expr="lte"
     )
 
-    # Filter cho công ty
+    # Company filters
     company = django_filters.CharFilter(
         field_name="company__name", lookup_expr="icontains"
     )
     company_id = django_filters.UUIDFilter(field_name="company__id")
 
-    # Filter cho địa điểm
+    # Location filters
     location = django_filters.CharFilter(
         field_name="company__locations__city", lookup_expr="icontains"
     )
@@ -48,12 +48,12 @@ class JobFilter(django_filters.FilterSet):
         field_name="company__locations__country", lookup_expr="icontains"
     )
 
-    # Filter cho kỹ năng
+    # Skill filters
     skills = django_filters.CharFilter(
         field_name="company__skills__name", lookup_expr="icontains"
     )
 
-    # Filter cho ngành nghề
+    # Industry filters
     industry = django_filters.CharFilter(
         field_name="company__industries__name", lookup_expr="icontains"
     )
