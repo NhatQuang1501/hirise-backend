@@ -14,8 +14,13 @@ from users.choices import (
     JobType,
     ExperienceLevel,
     Currency,
+    Role,
 )
-from users.serializers import UserSerializer
+from users.serializers import (
+    UserSerializer,
+    ApplicantProfileSerializer,
+    RecruiterProfileSerializer,
+)
 from django.db import transaction
 from django.utils import timezone
 
@@ -77,6 +82,7 @@ class CompanySerializer(serializers.ModelSerializer):
 
 class JobSerializer(serializers.ModelSerializer):
     company = CompanySerializer(read_only=True)
+    recruiter = RecruiterProfileSerializer(read_only=True)
     status_display = serializers.SerializerMethodField()
     application_count = serializers.SerializerMethodField()
     is_saved = serializers.SerializerMethodField()
@@ -87,6 +93,7 @@ class JobSerializer(serializers.ModelSerializer):
             "id",
             "title",
             "company",
+            "recruiter",
             "description",
             "responsibilities",
             "requirements",
@@ -109,6 +116,7 @@ class JobSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "company",
+            "recruiter",
             "created_at",
             "updated_at",
             "status_display",
@@ -141,8 +149,14 @@ class JobSerializer(serializers.ModelSerializer):
 
     def get_is_saved(self, obj):
         request = self.context.get("request")
-        if request and request.user.is_authenticated:
-            return SavedJob.objects.filter(user=request.user, job=obj).exists()
+        if (
+            request
+            and request.user.is_authenticated
+            and request.user.role == Role.APPLICANT
+        ):
+            return SavedJob.objects.filter(
+                applicant=request.user.applicant_profile, job=obj
+            ).exists()
         return False
 
     def validate(self, data):
@@ -197,7 +211,26 @@ class JobSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        # Tạo job với status đã được validate
+        request = self.context.get("request")
+        if (
+            request
+            and request.user.is_authenticated
+            and request.user.role == Role.RECRUITER
+        ):
+            # Lấy recruiter profile và company
+            recruiter_profile = request.user.recruiter_profile
+            company = recruiter_profile.company
+
+            # Kiểm tra recruiter có thuộc company không
+            if not company:
+                raise serializers.ValidationError(
+                    "Recruiter is not assigned to any company"
+                )
+
+            # Tạo job với company và recruiter
+            validated_data["company"] = company
+            validated_data["recruiter"] = recruiter_profile
+
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
@@ -217,19 +250,19 @@ class JobSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
     def _reject_pending_applications(self, job):
-        """Từ chối tất cả đơn ứng tuyển đang chờ xử lý khi job bị đóng"""
+        """Reject all pending applications when job is closed"""
         with transaction.atomic():
             pending_applications = job.applications.filter(
                 status__in=[ApplicationStatus.PENDING, ApplicationStatus.REVIEWING]
             )
             pending_applications.update(
                 status=ApplicationStatus.REJECTED,
-                note="Job đã bị đóng bởi nhà tuyển dụng",
+                note="Job has been closed by the recruiter",
             )
 
 
 class JobApplicationSerializer(serializers.ModelSerializer):
-    applicant = UserSerializer(read_only=True)
+    applicant = ApplicantProfileSerializer(read_only=True)
     job = JobSerializer(read_only=True, fields=["id", "title", "company", "status"])
     status_display = serializers.SerializerMethodField()
 
@@ -246,67 +279,33 @@ class JobApplicationSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "applicant", "job", "created_at", "status_display"]
 
-    def __init__(self, *args, **kwargs):
-        applicant_fields = kwargs.pop("applicant_fields", None)
-        job_fields = kwargs.pop("job_fields", None)
-        super().__init__(*args, **kwargs)
-
-        if "applicant" in self.fields and applicant_fields is not None:
-            self.fields["applicant"] = UserSerializer(
-                read_only=True, fields=applicant_fields
-            )
-
-        if "job" in self.fields and job_fields is not None:
-            self.fields["job"] = JobSerializer(read_only=True, fields=job_fields)
-
     def get_status_display(self, obj):
         return obj.get_status_display()
 
-    def validate_status(self, value):
-        """Kiểm tra chuyển đổi trạng thái hợp lệ"""
-        if not self.instance:
-            return value
+    def validate(self, data):
+        # Kiểm tra người dùng có phải là applicant không
+        request = self.context.get("request")
+        if request.user.role != Role.APPLICANT:
+            raise serializers.ValidationError("Only applicants can apply for jobs")
 
-        current_status = self.instance.status
-
-        # Kiểm tra quy trình chuyển đổi status
-        valid_transitions = {
-            ApplicationStatus.PENDING: [
-                ApplicationStatus.REVIEWING,
-                ApplicationStatus.REJECTED,
-            ],
-            ApplicationStatus.REVIEWING: [
-                ApplicationStatus.INTERVIEWED,
-                ApplicationStatus.REJECTED,
-            ],
-            ApplicationStatus.INTERVIEWED: [
-                ApplicationStatus.OFFERED,
-                ApplicationStatus.REJECTED,
-            ],
-            ApplicationStatus.OFFERED: [
-                ApplicationStatus.ACCEPTED,
-                ApplicationStatus.REJECTED,
-            ],
-            ApplicationStatus.ACCEPTED: [],  # Không thể chuyển từ ACCEPTED
-            ApplicationStatus.REJECTED: [],  # Không thể chuyển từ REJECTED
-        }
-
-        if value not in valid_transitions.get(current_status, []):
-            valid_status = [
-                ApplicationStatus(s).label
-                for s in valid_transitions.get(current_status, [])
-            ]
-            valid_status_str = (
-                ", ".join(valid_status)
-                if valid_status
-                else "không có trạng thái hợp lệ"
-            )
+        # Kiểm tra job có ở trạng thái published không
+        job = self.context.get("job")
+        if job.status != JobStatus.PUBLISHED:
             raise serializers.ValidationError(
-                f"Không thể chuyển từ '{ApplicationStatus(current_status).label}' sang '{ApplicationStatus(value).label}'. "
-                f"Trạng thái hợp lệ: {valid_status_str}"
+                "Cannot apply for a job that is not in published status"
             )
 
-        return value
+        return data
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        job = self.context.get("job")
+
+        # Tạo job application với applicant và job
+        validated_data["applicant"] = request.user.applicant_profile
+        validated_data["job"] = job
+
+        return super().create(validated_data)
 
 
 class SavedJobSerializer(serializers.ModelSerializer):
@@ -317,13 +316,43 @@ class SavedJobSerializer(serializers.ModelSerializer):
             "title",
             "company",
             "status",
-            "job_type",
-            "experience_level",
-            "salary_display",
+            "min_salary",
+            "max_salary",
+            "currency",
         ],
+        company_fields=["id", "name", "logo"],
     )
 
     class Meta:
         model = SavedJob
         fields = ["id", "job", "created_at"]
         read_only_fields = ["id", "created_at"]
+
+    def validate(self, data):
+        # Kiểm tra người dùng có phải là applicant không
+        request = self.context.get("request")
+        if request.user.role != Role.APPLICANT:
+            raise serializers.ValidationError("Only applicants can save jobs")
+
+        # Kiểm tra job có tồn tại không
+        job = self.context.get("job")
+        if not job:
+            raise serializers.ValidationError("Job does not exist")
+
+        # Kiểm tra job đã được lưu chưa
+        if SavedJob.objects.filter(
+            applicant=request.user.applicant_profile, job=job
+        ).exists():
+            raise serializers.ValidationError("This job has already been saved")
+
+        return data
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        job = self.context.get("job")
+
+        # Tạo saved job với applicant và job
+        validated_data["applicant"] = request.user.applicant_profile
+        validated_data["job"] = job
+
+        return super().create(validated_data)

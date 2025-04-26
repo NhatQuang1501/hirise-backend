@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser, Group, Permission
-from choices import *
+from users.choices import *
 import uuid
 from jobs.models import Company
 
@@ -20,8 +20,8 @@ class User(AbstractUser):
     is_verified = models.BooleanField(default=False)
     is_locked = models.BooleanField(default=False)
     locked_reason = models.TextField(blank=True)
-    locked_date = models.DateTimeField(blank=True)
-    unlocked_date = models.DateTimeField(blank=True)
+    locked_date = models.DateTimeField(blank=True, null=True)
+    unlocked_date = models.DateTimeField(blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -72,7 +72,7 @@ class ApplicantProfile(models.Model):
 
     @property
     def social_links_dict(self):
-        return {link.platform: link.url for link in self.social_links.all()}
+        return {link.platform: link.url for link in self.user.social_links.all()}
 
 
 class RecruiterProfile(models.Model):
@@ -99,24 +99,30 @@ class RecruiterProfile(models.Model):
     def recruiter_id(self):
         return self.user.id
 
+    @property
+    def social_links_dict(self):
+        return {link.platform: link.url for link in self.user.social_links.all()}
+
 
 class SocialLink(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    profile = models.ForeignKey(
-        ApplicantProfile,
+    user = models.ForeignKey(
+        User,
         on_delete=models.CASCADE,
         related_name="social_links",
     )
     platform = models.CharField(
         max_length=50,
         choices=Platform.choices,
-        on_delete=models.CASCADE,
     )
     url = models.URLField(blank=True, null=True)
     custom_label = models.CharField(max_length=100, blank=True, null=True)
 
+    class Meta:
+        unique_together = ("user", "platform")
+
     def __str__(self):
-        return f"{self.platform} - {self.url}"
+        return f"{self.user.username} - {self.platform} - {self.url}"
 
     @property
     def socialLink_id(self):

@@ -8,20 +8,20 @@ from users.choices import JobStatus, ApplicationStatus
 
 class JobService:
     """
-    Service class xử lý logic nghiệp vụ phức tạp liên quan đến Job
+    Service class for handling complex business logic related to Job
     """
 
     @staticmethod
     @transaction.atomic
     def publish_job(job):
         """
-        Đăng tải job và xử lý các bước logic liên quan
+        Publish a job and handle related logic
         """
         # Kiểm tra điều kiện đăng tải
         if job.status == JobStatus.PUBLISHED:
-            raise ValueError("Job đã được đăng tải rồi")
+            raise ValueError("Job is already published")
         if job.status == JobStatus.CLOSED:
-            raise ValueError("Không thể đăng tải lại job đã đóng")
+            raise ValueError("Cannot republish a closed job")
 
         # Kiểm tra các trường bắt buộc
         required_fields = ["title", "description", "job_type", "experience_level"]
@@ -32,7 +32,7 @@ class JobService:
                 missing_fields.append(field)
 
         if missing_fields:
-            raise ValueError(f"Thiếu các trường bắt buộc: {', '.join(missing_fields)}")
+            raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
 
         # Cập nhật trạng thái
         job.status = JobStatus.PUBLISHED
@@ -47,10 +47,10 @@ class JobService:
     @transaction.atomic
     def close_job(job, reason=None):
         """
-        Đóng job và từ chối tất cả đơn ứng tuyển đang chờ
+        Close a job and reject all pending applications
         """
         if job.status == JobStatus.CLOSED:
-            raise ValueError("Job is closed")
+            raise ValueError("Job is already closed")
 
         # Cập nhật trạng thái và ngày đóng
         job.status = JobStatus.CLOSED
@@ -79,7 +79,7 @@ class JobService:
     @staticmethod
     def get_job_statistics(job):
         """
-        Lấy thống kê về job
+        Get statistics about a job
         """
         stats = {
             # Tổng số đơn ứng tuyển
@@ -116,14 +116,14 @@ class JobService:
 
 class JobApplicationService:
     """
-    Service class xử lý logic nghiệp vụ liên quan đến JobApplication
+    Service class for handling business logic related to JobApplication
     """
 
     @staticmethod
     @transaction.atomic
     def process_application_status_change(application, new_status, note=None):
         """
-        Xử lý thay đổi trạng thái đơn ứng tuyển
+        Process status changes for job applications
         """
         current_status = application.status
 
@@ -137,8 +137,8 @@ class JobApplicationService:
                 ApplicationStatus.ACCEPTED,
                 ApplicationStatus.REJECTED,
             ],
-            ApplicationStatus.ACCEPTED: [],  # Không thể chuyển từ ACCEPTED sang trạng thái khác
-            ApplicationStatus.REJECTED: [],  # Không thể chuyển từ REJECTED sang trạng thái khác
+            ApplicationStatus.ACCEPTED: [],  # Cannot transition from ACCEPTED to other statuses
+            ApplicationStatus.REJECTED: [],  # Cannot transition from REJECTED to other statuses
         }
 
         if new_status not in valid_transitions.get(current_status, []):
@@ -147,8 +147,8 @@ class JobApplicationService:
                 for s in valid_transitions.get(current_status, [])
             ]
             raise ValueError(
-                f"Không thể chuyển từ '{ApplicationStatus(current_status).label}' sang '{ApplicationStatus(new_status).label}'. "
-                f"Trạng thái hợp lệ: {', '.join(valid_status)}"
+                f"Cannot transition from '{ApplicationStatus(current_status).label}' to '{ApplicationStatus(new_status).label}'. "
+                f"Valid statuses: {', '.join(valid_status)}"
             )
 
         # Cập nhật trạng thái
@@ -165,24 +165,24 @@ class JobApplicationService:
     @staticmethod
     def notify_applicant_status_change(application):
         """
-        Thông báo cho ứng viên khi trạng thái đơn ứng tuyển thay đổi
+        Notify applicant when application status changes
         """
-        subject = f"Cập nhật trạng thái đơn ứng tuyển: {application.job.title}"
+        subject = f"Application Status Update: {application.job.title}"
         status_display = ApplicationStatus(application.status).label
 
         message = f"""
-        Kính gửi {application.applicant.username},
+        Dear {application.applicant.username},
 
-        Đơn ứng tuyển của bạn cho vị trí {application.job.title} tại {application.job.company.name} đã được cập nhật.
+        Your application for the position of {application.job.title} at {application.job.company.name} has been updated.
 
-        Trạng thái hiện tại: {status_display}
+        Current status: {status_display}
 
         {application.note if application.note else ''}
 
-        Bạn có thể xem chi tiết đơn ứng tuyển tại trang cá nhân của mình.
+        You can view the details of your application on your profile page.
 
-        Trân trọng,
-        Đội ngũ HiRise
+        Regards,
+        HiRise Team
         """
 
         try:

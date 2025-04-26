@@ -2,7 +2,8 @@ from django.db import models
 from django.contrib.auth.models import Group, Permission
 import uuid
 from users.choices import *
-from users.models import User, RecruiterProfile, ApplicantProfile
+from django.core.exceptions import ValidationError
+from django.conf import settings
 
 
 class Location(models.Model):
@@ -13,7 +14,7 @@ class Location(models.Model):
     description = models.TextField(blank=True)
 
     def __str__(self):
-        return self.name
+        return self.city
 
     @property
     def location_id(self):
@@ -91,8 +92,9 @@ class Job(models.Model):
         on_delete=models.CASCADE,
         related_name="company_jobs",
     )
+    # Sử dụng string để tránh circular import
     recruiter = models.ForeignKey(
-        RecruiterProfile,
+        "users.RecruiterProfile",
         on_delete=models.SET_NULL,
         null=True,
         related_name="posted_jobs",
@@ -151,20 +153,31 @@ class Job(models.Model):
             return f"Up to {self.max_salary:,} {self.currency}"
         return "Not specified"
 
+    def clean(self):
+        # Đảm bảo rằng recruiter tạo job phải thuộc công ty của job
+        if self.recruiter and self.company:
+            if self.recruiter.company != self.company:
+                raise ValidationError("Recruiter phải thuộc cùng công ty với job.")
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
 
 class SavedJob(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="saved_job")
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="saved_job_user"
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="saved_by")
+    # Sử dụng string để tránh circular import
+    applicant = models.ForeignKey(
+        "users.ApplicantProfile", on_delete=models.CASCADE, related_name="saved_jobs"
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ("user", "job")
+        unique_together = ("applicant", "job")
 
     def __str__(self):
-        return f"{self.user.username} saved {self.job.title}"
+        return f"{self.applicant.user.username if hasattr(self.applicant, 'user') else 'Unknown'} saved {self.job.title}"
 
     @property
     def savedJob_id(self):
@@ -178,8 +191,9 @@ class JobApplication(models.Model):
         on_delete=models.CASCADE,
         related_name="applications",
     )
+    # Sử dụng string để tránh circular import
     applicant = models.ForeignKey(
-        ApplicantProfile,
+        "users.ApplicantProfile",
         on_delete=models.CASCADE,
         related_name="applications",
     )
@@ -195,7 +209,7 @@ class JobApplication(models.Model):
         unique_together = ("applicant", "job")
 
     def __str__(self):
-        return f"{self.applicant.username} - {self.job.title}"
+        return f"{self.applicant.user.username if hasattr(self.applicant, 'user') else 'Unknown'} - {self.job.title}"
 
     @property
     def jobApplication_id(self):
@@ -230,24 +244,25 @@ class CVReview(models.Model):
         return f"Review for {self.application}"
 
 
-class JobView(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    job = models.ForeignKey(
-        Job,
-        on_delete=models.CASCADE,
-        related_name="views",
-    )
-    user = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-    )
-    viewed_at = models.DateTimeField(auto_now_add=True)
+# class JobView(models.Model):
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+#     job = models.ForeignKey(
+#         Job,
+#         on_delete=models.CASCADE,
+#         related_name="views",
+#     )
+#     # Sử dụng settings.AUTH_USER_MODEL để tránh circular import
+#     user = models.ForeignKey(
+#         settings.AUTH_USER_MODEL,
+#         on_delete=models.SET_NULL,
+#         null=True,
+#         blank=True,
+#     )
+#     viewed_at = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
-        return f"Viewed {self.job.title} at {self.viewed_at}"
+#     def __str__(self):
+#         return f"Viewed {self.job.title} at {self.viewed_at}"
 
-    @property
-    def jobView_id(self):
-        return self.id
+#     @property
+#     def jobView_id(self):
+#         return self.id

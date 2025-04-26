@@ -7,7 +7,7 @@ from users.choices import Role
 from users.utils import get_otp_from_cache
 
 
-# User Serializer đa năng với các trường linh hoạt
+# Versatile User Serializer with flexible fields
 class UserSerializer(serializers.ModelSerializer):
     profile = serializers.SerializerMethodField()
 
@@ -67,7 +67,7 @@ class UserSerializer(serializers.ModelSerializer):
         return None
 
 
-# Serializers cho profiles
+# Profile serializers
 class SocialLinkSerializer(serializers.ModelSerializer):
     class Meta:
         model = SocialLink
@@ -92,7 +92,7 @@ class ApplicantProfileSerializer(serializers.ModelSerializer):
         ]
 
     def __init__(self, *args, **kwargs):
-        # Tùy chỉnh trường user
+        # Customize user field
         user_fields = kwargs.pop("user_fields", None)
         super().__init__(*args, **kwargs)
 
@@ -106,12 +106,12 @@ class ApplicantProfileSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         social_links_data = validated_data.pop("social_links", None)
 
-        # Cập nhật các trường của ApplicantProfile
+        # Update ApplicantProfile fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
 
-        # Cập nhật social links nếu có
+        # Update social links if provided
         if social_links_data is not None:
             instance.social_links.all().delete()
             for link_data in social_links_data:
@@ -138,7 +138,7 @@ class RecruiterProfileSerializer(serializers.ModelSerializer):
         read_only_fields = ["company", "company_name"]
 
     def __init__(self, *args, **kwargs):
-        # Tùy chỉnh trường user
+        # Customize user field
         user_fields = kwargs.pop("user_fields", None)
         super().__init__(*args, **kwargs)
 
@@ -172,7 +172,7 @@ class RecruiterProfileSerializer(serializers.ModelSerializer):
         return instance
 
 
-# Các serializers xác thực
+# Authentication serializers
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True)
     role = serializers.ChoiceField(choices=Role.choices, required=True)
@@ -182,7 +182,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         fields = ["username", "email", "password", "role"]
 
     def validate(self, data):
-        """Gộp các validation thành một query duy nhất"""
+        """Combine validations into a single query"""
         email = data.get("email")
         username = data.get("username")
 
@@ -267,7 +267,7 @@ class LoginSerializer(serializers.Serializer):
         if not user:
             raise serializers.ValidationError("Username or password is incorrect")
 
-        # Xác thực các điều kiện bổ sung
+        # Validate additional conditions
         errors = []
         if not user.is_verified:
             errors.append("Your account has not been verified")

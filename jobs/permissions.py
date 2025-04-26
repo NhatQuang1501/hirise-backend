@@ -44,11 +44,11 @@ class IsJobOwner(permissions.BasePermission):
 
 class IsJobCreator(permissions.BasePermission):
     """
-    Chỉ cho phép người tạo job chỉnh sửa hoặc xóa job đó.
+    Chỉ cho phép recruiter thuộc công ty của job để chỉnh sửa hoặc xóa job đó.
     """
 
     def has_object_permission(self, request, view, obj):
-        # Chỉ người tạo job mới có quyền chỉnh sửa hoặc xóa
+        # Chỉ recruiter thuộc cùng công ty với job được chỉnh sửa hoặc xóa
         return (
             request.user.is_authenticated
             and request.user.role == Role.RECRUITER
@@ -59,7 +59,7 @@ class IsJobCreator(permissions.BasePermission):
 class CanViewJob(permissions.BasePermission):
     """
     Quyền xem job dựa trên trạng thái.
-    Job DRAFT chỉ có thể được xem bởi người tạo hoặc admin.
+    Job DRAFT chỉ có thể được xem bởi recruiter thuộc công ty của job hoặc admin.
     Job PUBLISHED và CLOSED có thể được xem bởi tất cả mọi người.
     """
 
@@ -68,7 +68,7 @@ class CanViewJob(permissions.BasePermission):
         if request.user.is_authenticated and request.user.role == Role.ADMIN:
             return True
 
-        # Nhà tuyển dụng sở hữu job luôn có quyền xem
+        # Nhà tuyển dụng thuộc công ty sở hữu job luôn có quyền xem
         if (
             request.user.is_authenticated
             and request.user.role == Role.RECRUITER
@@ -76,7 +76,7 @@ class CanViewJob(permissions.BasePermission):
         ):
             return True
 
-        # Nếu job là DRAFT, chỉ owner mới xem được (đã xử lý ở trên)
+        # Nếu job là DRAFT, chỉ recruiter thuộc công ty mới xem được (đã xử lý ở trên)
         if obj.status == JobStatus.DRAFT:
             return False
 
@@ -96,7 +96,7 @@ class IsApplicationOwnerOrJobRecruiter(permissions.BasePermission):
         # Ứng viên chỉ xem được đơn của mình
         if request.user.role == Role.APPLICANT:
             return (
-                obj.applicant == request.user
+                obj.applicant.user == request.user
                 and request.method in permissions.SAFE_METHODS
             )
 
@@ -127,3 +127,16 @@ class IsRecruiter(permissions.BasePermission):
 
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role == Role.RECRUITER
+
+
+class IsSavedJobOwner(permissions.BasePermission):
+    """
+    Chỉ cho phép chủ sở hữu của saved job thao tác.
+    """
+
+    def has_object_permission(self, request, view, obj):
+        return (
+            request.user.is_authenticated
+            and request.user.role == Role.APPLICANT
+            and obj.applicant == request.user.applicant_profile
+        )

@@ -51,7 +51,7 @@ class OTPVerifyView(APIView):
         if serializer.is_valid():
             user = serializer.validated_data["user"]
 
-            # Xóa OTP và cập nhật trạng thái xác thực
+            # Delete OTP and update verification status
             try:
                 with transaction.atomic():
                     delete_otp_from_cache(user.email)
@@ -111,7 +111,7 @@ class LoginView(APIView):
             user = serializer.validated_data["user"]
             tokens = get_tokens_for_user(user)
 
-            # Lấy thông tin user và profile
+            # Get user and profile information
             profile_data = self._get_user_profile(user)
             response_data = {
                 "refresh": tokens["refresh"],

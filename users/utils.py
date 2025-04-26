@@ -14,7 +14,7 @@ from threading import Thread
 
 logger = logging.getLogger(__name__)
 
-# Hằng số cho OTP
+# Constants for OTP
 OTP_LENGTH = 6
 EMAIL_SUPPORT = "quangpbl1@gmail.com"
 HOTLINE = "0123 456 789"
@@ -134,7 +134,7 @@ def send_email_account_lock(user, locked_reason, locked_date, unlocked_date):
     subject = "Account Locked Notification - HiRise"
     body_content = (
         f"We regret to inform you that your account on the HiRise system has been locked due to the following reason: {locked_reason}. This action was taken to ensure the security of your account and the system.\n\n"
-        f"Your account has been locked from {locked_date.strftime('%H:%M:%S ngày %d/%m/%Y')} to {unlocked_date.strftime('%H:%M:%S ngày %d/%m/%Y')}.\n\n"
+        f"Your account has been locked from {locked_date.strftime('%H:%M:%S %d/%m/%Y')} to {unlocked_date.strftime('%H:%M:%S %d/%m/%Y')}.\n\n"
         "During the lock period, you will not be able to log in or use the system's functions. "
         "We sincerely apologize if this causes you any inconvenience.\n\n"
         "If you believe this is an error or if you have any questions, please contact us for assistance.\n\n"
@@ -149,7 +149,7 @@ def send_email_account_unlock(user, unlocked_date):
     """Gửi email thông báo mở khóa tài khoản"""
     subject = "Account Unlocked Notification - HiRise"
     body_content = (
-        f"Your account on the HiRise system has been unlocked from {unlocked_date.strftime('%H:%M:%S ngày %d/%m/%Y')}.\n\n"
+        f"Your account on the HiRise system has been unlocked from {unlocked_date.strftime('%H:%M:%S %d/%m/%Y')}.\n\n"
         "You can log in and use the system's functions as usual. "
         "Thank you for being with HiRise.\n\n"
     )
@@ -159,21 +159,21 @@ def send_email_account_unlock(user, unlocked_date):
 
 
 class CustomPagination(PageNumberPagination):
-    page_size = 10  # Số lượng items trên mỗi trang
+    page_size = 10  # Number of items per page
     page_size_query_param = (
-        "page_size"  # Cho phép client thay đổi page_size qua query param
+        "page_size"  # Allow clients to change page_size via query param
     )
-    max_page_size = 50  # Giới hạn tối đa của page_size
+    max_page_size = 50  # Maximum limit for page_size
 
     def get_paginated_response(self, data):
         return Response(
             {
-                "count": self.page.paginator.count,  # Tổng số items
-                "next": self.get_next_link(),  # Link trang tiếp theo
-                "previous": self.get_previous_link(),  # Link trang trước
-                "current_page": self.page.number,  # Trang hiện tại
-                "total_pages": self.page.paginator.num_pages,  # Tổng số trang
-                "results": data,  # Dữ liệu của trang hiện tại
+                "count": self.page.paginator.count,  # Total number of items
+                "next": self.get_next_link(),  # Link to next page
+                "previous": self.get_previous_link(),  # Link to previous page
+                "current_page": self.page.number,  # Current page
+                "total_pages": self.page.paginator.num_pages,  # Total number of pages
+                "results": data,  # Data for current page
             },
             status=status.HTTP_200_OK,
         )
