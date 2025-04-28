@@ -13,14 +13,14 @@ from users.serializers import (
 from users.choices import Role, Gender
 from users.permission import *
 from django.shortcuts import get_object_or_404
-from django_filters import rest_framework as filters
+from django_filters.rest_framework import DjangoFilterBackend
 from users.filters import ApplicantFilter, RecruiterFilter
 
 
 class BaseUserView(APIView):
     pagination_class = CustomPagination
     serializer_class = UserSerializer
-    filter_backends = (filters.DjangoFilterBackend,)
+    filter_backends = DjangoFilterBackend
     filterset_class = None
     profile_serializer_class = None
     role = None

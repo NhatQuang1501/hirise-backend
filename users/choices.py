@@ -73,5 +73,6 @@ class ExperienceLevel(BaseChoices):
     JUNIOR = "junior", "Junior (1-3 years)"
     MIDDLE = "middle", "Middle (3-5 years)"
     SENIOR = "senior", "Senior (5+ years)"
-    LEAD = "lead", "Team Lead/Manager"
-    EXPERT = "expert", "Expert/Director"
+    LEAD = "lead", "Team Lead"
+    MANAGER = "manager", "Manager"
+    # EXPERT = "expert", "Expert/Director"
