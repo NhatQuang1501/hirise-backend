@@ -16,7 +16,7 @@ class BaseChoices(models.TextChoices):
 class Role(BaseChoices):
     APPLICANT = "applicant", "Applicant"
     ADMIN = "admin", "Admin"
-    RECRUITER = "recruiter", "Recruiter"
+    COMPANY = "company", "Company"
 
 
 class Gender(BaseChoices):
@@ -61,8 +61,8 @@ class ApplicationStatus(BaseChoices):
 
 
 class JobType(BaseChoices):
-    FULL_TIME = "full_time", "Full Time"
-    PART_TIME = "part_time", "Part Time"
+    FULL_TIME = "full time", "Full Time"
+    PART_TIME = "part time", "Part Time"
     CONTRACT = "contract", "Contract"
     FREELANCE = "freelance", "Freelance"
 
@@ -73,6 +73,14 @@ class ExperienceLevel(BaseChoices):
     JUNIOR = "junior", "Junior (1-3 years)"
     MIDDLE = "middle", "Middle (3-5 years)"
     SENIOR = "senior", "Senior (5+ years)"
-    LEAD = "lead", "Team Lead"
+    LEAD = "lead", "Lead"
     MANAGER = "manager", "Manager"
-    # EXPERT = "expert", "Expert/Director"
+
+
+class City(BaseChoices):
+    HANOI = "hanoi", "Ha Noi"
+    HOCHIMINH = "hochiminh", "Ho Chi Minh"
+    DANANG = "danang", "Da Nang"
+    HUE = "hue", "Hue"
+    CANTHO = "cantho", "Can Tho"
+    OTHERS = "others", "Others"

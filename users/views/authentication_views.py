@@ -6,14 +6,15 @@ from django.shortcuts import get_object_or_404
 from django.db import transaction
 from users.serializers import (
     UserSerializer,
+    UserWithProfileSerializer,
     RegisterSerializer,
     OTPVerifySerializer,
     ResendOTPSerializer,
     LoginSerializer,
     ApplicantProfileSerializer,
-    RecruiterProfileSerializer,
+    CompanyProfileSerializer,
 )
-from users.models import User, ApplicantProfile, RecruiterProfile
+from users.models import User, ApplicantProfile, CompanyProfile
 from users.utils import (
     create_and_send_otp,
     delete_otp_from_cache,
@@ -108,21 +109,26 @@ class LoginView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
-            user = serializer.validated_data["user"]
-            tokens = get_tokens_for_user(user)
+            try:
+                user = serializer.validated_data["user"]
+                tokens = get_tokens_for_user(user)
 
-            # Get user and profile information
-            profile_data = self._get_user_profile(user)
-            response_data = {
-                "refresh": tokens["refresh"],
-                "access": tokens["access"],
-                "user": UserSerializer(user).data,
-            }
+                # Sử dụng UserWithProfileSerializer cho response
+                user_data = UserWithProfileSerializer(user).data
 
-            if profile_data:
-                response_data["profile"] = profile_data
+                response_data = {
+                    "refresh": tokens["refresh"],
+                    "access": tokens["access"],
+                    "user": user_data,
+                }
 
-            return Response(response_data, status=status.HTTP_200_OK)
+                return Response(response_data, status=status.HTTP_200_OK)
+            except Exception as e:
+                print(f"Login error: {str(e)}")  # Thêm log để debug
+                return Response(
+                    {"error": "An error occurred during login"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -130,9 +136,9 @@ class LoginView(APIView):
         if user.role == Role.APPLICANT:
             profile = getattr(user, "applicant_profile", None)
             return ApplicantProfileSerializer(profile).data if profile else None
-        elif user.role == Role.RECRUITER:
-            profile = getattr(user, "recruiter_profile", None)
-            return RecruiterProfileSerializer(profile).data if profile else None
+        elif user.role == Role.COMPANY:
+            profile = getattr(user, "company_profile", None)
+            return CompanyProfileSerializer(profile).data if profile else None
         return None
 
 

@@ -8,21 +8,35 @@ from django.db.models import Q, Count
 from django.utils import timezone
 from django.db import transaction
 
-from jobs.models import Job, JobApplication, SavedJob, JobView
-from jobs.serializers import JobSerializer, JobApplicationSerializer, SavedJobSerializer
+from jobs.models import (
+    Job,
+    JobApplication,
+    SavedJob,
+    JobStatistics,
+    CompanyStatistics,
+    InterviewSchedule,
+    CVReview,
+)
+from jobs.serializers import (
+    JobSerializer,
+    JobApplicationSerializer,
+    SavedJobSerializer,
+    JobStatisticsSerializer,
+    CompanyStatisticsSerializer,
+)
 from jobs.filters import JobFilter
 from jobs.permissions import (
-    IsRecruiterOrReadOnly,
+    IsCompanyOrReadOnly,
     IsJobOwner,
     IsJobCreator,
     CanViewJob,
-    IsApplicationOwnerOrJobRecruiter,
+    IsApplicationOwnerOrJobCompany,
     IsApplicant,
-    IsRecruiter,
+    IsCompany,
     IsSavedJobOwner,
 )
 from users.choices import JobStatus, ApplicationStatus, Role
-from users.models import User, ApplicantProfile
+from users.models import User, ApplicantProfile, CompanyProfile
 from users.utils import CustomPagination
 
 
@@ -32,27 +46,69 @@ class JobListView(APIView):
 
     permission_classes = [AllowAny]
     pagination_class = CustomPagination
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = JobFilter
+    ordering_fields = ["created_at", "updated_at", "title"]
+    ordering = ["-created_at"]
 
     def get(self, request):
         # Lấy danh sách job với các quan hệ cần thiết
-        queryset = Job.objects.select_related("company", "recruiter").all()
+        queryset = (
+            Job.objects.select_related("company")
+            .prefetch_related(
+                "locations",
+                "industries",
+                "skills",
+                "saved_by",
+            )
+            .all()
+        )
 
-        # Applicant không thể xem job DRAFT
-        if not request.user.is_authenticated or request.user.role == Role.APPLICANT:
-            queryset = queryset.exclude(status=JobStatus.DRAFT)
+        # Lấy status từ query params nếu có
+        status_filter = request.query_params.get("status")
 
-        # Nếu là nhà tuyển dụng, chỉ hiển thị job của công ty họ và job PUBLISHED của công ty khác
-        elif request.user.role == Role.RECRUITER:
-            company = request.user.recruiter_profile.company
-            if company:
-                # Job của công ty hiện tại + các job PUBLISHED của công ty khác
-                queryset = queryset.filter(
-                    Q(company=company)
-                    | ~Q(company=company) & ~Q(status=JobStatus.DRAFT)
-                )
-            else:
-                # Nếu recruiter chưa có công ty, chỉ xem job PUBLISHED
+        # Nếu có filter theo status cụ thể, ưu tiên áp dụng filter này trước
+        if status_filter and status_filter in dict(JobStatus.choices):
+            queryset = queryset.filter(status=status_filter)
+
+            # Nếu filter là DRAFT, chỉ cho phép công ty xem job DRAFT của chính họ
+            if status_filter == JobStatus.DRAFT:
+                if (
+                    not request.user.is_authenticated
+                    or request.user.role != Role.COMPANY
+                ):
+                    return Response(
+                        {"detail": "You don't have permission to view draft jobs"},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+
+                # Nếu là công ty, chỉ xem được job DRAFT của chính họ
+                company = request.user.company_profile
+                if company:
+                    queryset = queryset.filter(company=company)
+                else:
+                    return Response(
+                        {"detail": "You need to complete your company profile"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+        else:
+            # Nếu không có filter status cụ thể, áp dụng quy tắc mặc định
+            # Applicant không thể xem job DRAFT
+            if not request.user.is_authenticated or request.user.role == Role.APPLICANT:
                 queryset = queryset.exclude(status=JobStatus.DRAFT)
+
+            # Nếu là công ty, chỉ hiển thị job của họ và job PUBLISHED của công ty khác
+            elif request.user.role == Role.COMPANY:
+                company = request.user.company_profile
+                if company:
+                    # Job của công ty hiện tại + các job PUBLISHED của công ty khác
+                    queryset = queryset.filter(
+                        Q(company=company)
+                        | ~Q(company=company) & ~Q(status=JobStatus.DRAFT)
+                    )
+                else:
+                    # Nếu công ty chưa có profile, chỉ xem job PUBLISHED
+                    queryset = queryset.exclude(status=JobStatus.DRAFT)
 
         # Tìm kiếm
         search = request.query_params.get("search")
@@ -62,15 +118,20 @@ class JobListView(APIView):
                 | Q(description__icontains=search)
                 | Q(requirements__icontains=search)
                 | Q(company__name__icontains=search)
+                | Q(city__icontains=search)
             )
 
-        # Filter
-        filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-        filterset_class = JobFilter
+        # Filter các trường khác
+        filterset = JobFilter(request.query_params, queryset=queryset)
+        if filterset.is_valid():
+            queryset = filterset.qs
 
-        # Áp dụng filterset
-        for backend in filter_backends:
-            queryset = backend().filter_queryset(request, queryset, filterset_class)
+        # Áp dụng ordering
+        ordering = request.query_params.get("ordering", "-created_at")
+        if ordering:
+            queryset = queryset.order_by(ordering)
+
+        print("Query params:", request.query_params)
 
         # Phân trang
         paginator = self.pagination_class()
@@ -91,17 +152,15 @@ class JobDetailView(APIView):
 
     def get(self, request, pk):
         # Lấy thông tin job với các quan hệ cần thiết
-        job = get_object_or_404(
-            Job.objects.select_related("company", "recruiter"), id=pk
-        )
+        job = get_object_or_404(Job.objects.select_related("company"), id=pk)
 
         # Kiểm tra quyền xem job
         self.check_object_permissions(request, job)
 
-        # Ghi lại lượt xem
-        JobView.objects.create(
-            job=job, user=request.user if request.user.is_authenticated else None
-        )
+        # Ghi lại lượt xem nếu có JobStatistics
+        job_stats, created = JobStatistics.objects.get_or_create(job=job)
+        job_stats.view_count += 1
+        job_stats.save()
 
         # Trả về thông tin job
         serializer = JobSerializer(job, context={"request": request})
@@ -111,24 +170,33 @@ class JobDetailView(APIView):
 class JobCreateView(APIView):
     """API to create a new job"""
 
-    permission_classes = [IsAuthenticated, IsRecruiter]
+    permission_classes = [IsAuthenticated, IsCompany]
 
     def post(self, request):
         serializer = JobSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
-            # Gán công ty của nhà tuyển dụng
+            # Gán company profile
             user = request.user
-            company = user.recruiter_profile.company
-            if not company:
+            company_profile = user.company_profile
+            if not company_profile:
                 return Response(
                     {
-                        "detail": "You need to be assigned to a company before creating a job"
+                        "detail": "You need to complete your company profile before creating a job"
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
             # Tạo job
             job = serializer.save()
+
+            # Cập nhật thống kê công ty
+            company_stats, created = CompanyStatistics.objects.get_or_create(
+                company=company_profile
+            )
+            company_stats.total_jobs += 1
+            if job.status == JobStatus.PUBLISHED:
+                company_stats.active_jobs += 1
+            company_stats.save()
 
             # Trả về thông tin job
             serializer = JobSerializer(job, context={"request": request})
@@ -144,9 +212,7 @@ class JobUpdateView(APIView):
     permission_classes = [IsAuthenticated, IsJobCreator]
 
     def get_object(self, pk):
-        job = get_object_or_404(
-            Job.objects.select_related("company", "recruiter"), id=pk
-        )
+        job = get_object_or_404(Job.objects.select_related("company"), id=pk)
         self.check_object_permissions(self.request, job)
         return job
 
@@ -160,7 +226,7 @@ class JobUpdateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Kiểm tra nếu đang cập nhật job PUBLISHED
+        # Lưu trạng thái trước đó của job
         was_published = job.status == JobStatus.PUBLISHED
 
         # Cập nhật job
@@ -168,20 +234,31 @@ class JobUpdateView(APIView):
         if serializer.is_valid():
             updated_job = serializer.save()
 
-            # Job PUBLISHED khi chỉnh sửa sẽ chuyển về DRAFT trừ khi cố tình đóng job
-            if (
-                was_published
-                and "status" not in request.data
-                and updated_job.status != JobStatus.CLOSED
-            ):
-                updated_job.status = JobStatus.DRAFT
+            # Cập nhật trạng thái theo yêu cầu từ client
+            # Nếu status được chỉ định trong request, sử dụng nó
+            # Nếu không được chỉ định và job đã published trước đó, giữ nguyên trạng thái published
+            if "status" in request.data:
+                # Trạng thái đã được xử lý trong serializer.save()
+                pass
+            elif was_published:
+                # Giữ nguyên trạng thái PUBLISHED thay vì chuyển về DRAFT
+                updated_job.status = JobStatus.PUBLISHED
                 updated_job.save(update_fields=["status"])
 
-            # Trả về thông tin job
+            # Cập nhật thống kê công ty nếu trạng thái thay đổi
+            if updated_job.status != job.status:
+                company_stats, created = CompanyStatistics.objects.get_or_create(
+                    company=job.company
+                )
+                if updated_job.status == JobStatus.PUBLISHED:
+                    company_stats.active_jobs += 1
+                elif job.status == JobStatus.PUBLISHED:
+                    company_stats.active_jobs = max(0, company_stats.active_jobs - 1)
+                company_stats.save()
+
             serializer = JobSerializer(updated_job, context={"request": request})
             return Response(serializer.data)
 
-        # Xử lý lỗi
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def patch(self, request, pk):
@@ -197,18 +274,27 @@ class JobUpdateView(APIView):
         # Kiểm tra nếu đang cập nhật job PUBLISHED
         was_published = job.status == JobStatus.PUBLISHED
 
+        # Lưu trạng thái hiện tại để kiểm tra thay đổi
+        old_status = job.status
+
         # Cập nhật job
         serializer = JobSerializer(
             job, data=request.data, partial=True, context={"request": request}
         )
-
         if serializer.is_valid():
             updated_job = serializer.save()
 
-            # Job PUBLISHED khi chỉnh sửa sẽ chuyển về DRAFT trừ khi cố tình closed hoặc vẫn giữ published
-            if was_published and "status" not in request.data:
-                updated_job.status = JobStatus.DRAFT
-                updated_job.save(update_fields=["status"])
+            # Kiểm tra nếu trạng thái đã thay đổi
+            if updated_job.status != old_status:
+                # Cập nhật thống kê công ty
+                company_stats, created = CompanyStatistics.objects.get_or_create(
+                    company=job.company
+                )
+                if updated_job.status == JobStatus.PUBLISHED:
+                    company_stats.active_jobs += 1
+                elif old_status == JobStatus.PUBLISHED:
+                    company_stats.active_jobs = max(0, company_stats.active_jobs - 1)
+                company_stats.save()
 
             # Trả về thông tin job
             serializer = JobSerializer(updated_job, context={"request": request})
@@ -225,21 +311,33 @@ class JobDeleteView(APIView):
 
     def delete(self, request, pk):
         # Lấy thông tin job với các quan hệ cần thiết
-        job = get_object_or_404(
-            Job.objects.select_related("company", "recruiter"), id=pk
-        )
-
-        # Kiểm tra quyền xóa
+        job = get_object_or_404(Job.objects.select_related("company"), id=pk)
         self.check_object_permissions(request, job)
 
-        # Xóa job
-        job.delete()
+        # Kiểm tra xem job có applications không
+        if job.applications.exists():
+            return Response(
+                {
+                    "detail": "Cannot delete a job that has applications. Close it instead."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # Thông báo xóa thành công
-        return Response(
-            {"detail": "Job has been successfully deleted"},
-            status=status.HTTP_204_NO_CONTENT,
-        )
+        # Xóa job
+        with transaction.atomic():
+            # Cập nhật thống kê công ty
+            company_stats, created = CompanyStatistics.objects.get_or_create(
+                company=job.company
+            )
+            company_stats.total_jobs = max(0, company_stats.total_jobs - 1)
+            if job.status == JobStatus.PUBLISHED:
+                company_stats.active_jobs = max(0, company_stats.active_jobs - 1)
+            company_stats.save()
+
+            # Xóa job
+            job.delete()
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class JobStatusUpdateView(APIView):
@@ -249,44 +347,41 @@ class JobStatusUpdateView(APIView):
 
     def patch(self, request, pk):
         # Lấy thông tin job với các quan hệ cần thiết
-        job = get_object_or_404(
-            Job.objects.select_related("company", "recruiter"), id=pk
-        )
-
-        # Kiểm tra quyền thay đổi trạng thái
+        job = get_object_or_404(Job.objects.select_related("company"), id=pk)
         self.check_object_permissions(request, job)
 
-        # Kiểm tra trạng thái mới có được cung cấp không
-        new_status = request.data.get("status")
-        if not new_status:
+        # Lấy trạng thái cũ để so sánh
+        old_status = job.status
+
+        # Lấy trạng thái mới từ request
+        status_value = request.data.get("status")
+        if not status_value:
             return Response(
-                {"detail": "New job status is not provided"},
+                {"detail": "Status is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Kiểm tra giá trị status hợp lệ
+        valid_statuses = [s[0] for s in JobStatus.choices]
+        if status_value not in valid_statuses:
+            return Response(
+                {"detail": f"Invalid status. Must be one of {valid_statuses}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Kiểm tra trạng thái mới hợp lệ
-        if new_status not in dict(JobStatus.choices):
-            return Response(
-                {"detail": f"Status '{new_status}' is not valid"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Không thể thay đổi trạng thái job đã đóng
+        # Kiểm tra nếu job đã đóng
         if job.status == JobStatus.CLOSED:
             return Response(
-                {"detail": "Cannot change status of a closed job"},
+                {"detail": "Cannot update status of a closed job"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Kiểm tra các trường bắt buộc khi publish
-        if new_status == JobStatus.PUBLISHED:
+        # Kiểm tra chuyển trạng thái hợp lệ
+        if status_value == JobStatus.PUBLISHED:
+            # Kiểm tra các trường bắt buộc khi publish
             required_fields = ["title", "description", "job_type", "experience_level"]
-            missing_fields = []
-
-            for field in required_fields:
-                if not getattr(job, field):
-                    missing_fields.append(field)
-
+            missing_fields = [
+                field for field in required_fields if not getattr(job, field)
+            ]
             if missing_fields:
                 return Response(
                     {
@@ -295,29 +390,41 @@ class JobStatusUpdateView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        # Thay đổi trạng thái
-        if job.status != new_status:
-            # Nếu closed job, cập nhật closed_date
-            if new_status == JobStatus.CLOSED:
+        # Cập nhật trạng thái
+        with transaction.atomic():
+            job.status = status_value
+            # Nếu chuyển sang CLOSED, set closed_date
+            if status_value == JobStatus.CLOSED:
                 job.closed_date = timezone.now().date()
-                job.save(update_fields=["status", "closed_date", "updated_at"])
 
                 # Từ chối các đơn ứng tuyển chưa xử lý
-                with transaction.atomic():
-                    pending_applications = job.applications.filter(
-                        status__in=[
-                            ApplicationStatus.PENDING,
-                            ApplicationStatus.REVIEWING,
-                        ]
-                    )
-                    pending_applications.update(
-                        status=ApplicationStatus.REJECTED,
-                        note="Job has been closed by recruiter",
-                    )
-            else:
-                job.save(update_fields=["status", "updated_at"])
+                pending_applications = job.applications.filter(
+                    status__in=[ApplicationStatus.PENDING, ApplicationStatus.REVIEWING]
+                )
+                pending_applications.update(
+                    status=ApplicationStatus.REJECTED,
+                    note="Job has been closed by the company",
+                )
 
-        # Serialize và trả về kết quả
+            job.save()
+
+            # Cập nhật thống kê công ty
+            company_stats, created = CompanyStatistics.objects.get_or_create(
+                company=job.company
+            )
+            if (
+                status_value == JobStatus.PUBLISHED
+                and old_status != JobStatus.PUBLISHED
+            ):
+                company_stats.active_jobs += 1
+            elif (
+                old_status == JobStatus.PUBLISHED
+                and status_value != JobStatus.PUBLISHED
+            ):
+                company_stats.active_jobs = max(0, company_stats.active_jobs - 1)
+            company_stats.save()
+
+        # Trả về thông tin job
         serializer = JobSerializer(job, context={"request": request})
         return Response(serializer.data)
 
@@ -331,73 +438,57 @@ class AutoCloseJobsView(APIView):
         # Only admin has permission to call this API
         if request.user.role != Role.ADMIN:
             return Response(
-                {"detail": "Only admin can perform this function"},
+                {"detail": "Only admin can perform this action"},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Get expiry days from request, default to 30 days
-        try:
-            expiry_days = int(request.data.get("expiry_days", 30))
-            if expiry_days <= 0:
-                return Response(
-                    {"detail": "Invalid expiry days value"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-        except ValueError:
-            return Response(
-                {"detail": "Invalid expiry days value"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Get expired jobs
+        # Get today's date
         today = timezone.now().date()
-        expiry_date = today - timezone.timedelta(days=expiry_days)
 
-        # Tìm các job hết hạn để đóng
-        jobs_to_close = (
-            Job.objects.filter(status=JobStatus.PUBLISHED)
-            .filter(
-                # Jobs đã quá date đóng
-                Q(closed_date__isnull=False, closed_date__lt=today)
-                |
-                # Jobs đã tạo quá lâu mà không set closed_date
-                Q(
-                    closed_date__isnull=True,
-                    updated_at__date__lte=expiry_date,
-                    created_at__date__lte=expiry_date,
-                )
-            )
-            .select_related("company", "recruiter")
-            .prefetch_related("applications")
+        # Find jobs that should be closed
+        jobs_to_close = Job.objects.filter(
+            status=JobStatus.PUBLISHED, closed_date__lt=today
         )
 
-        # Close expired jobs
-        jobs_closed = 0
-        for job in jobs_to_close:
-            with transaction.atomic():
-                # Update job status
-                job.status = JobStatus.CLOSED
-                job.closed_date = today
-                job.save(update_fields=["status", "closed_date", "updated_at"])
+        # Number of jobs to close
+        jobs_count = jobs_to_close.count()
 
-                # Reject pending applications
-                job.applications.filter(
-                    status__in=[ApplicationStatus.PENDING, ApplicationStatus.REVIEWING]
-                ).update(
-                    status=ApplicationStatus.REJECTED,
-                    note="Job has been closed automatically due to expiration",
+        if jobs_count == 0:
+            return Response({"detail": "No jobs to close"})
+
+        # Close jobs and reject pending applications
+        with transaction.atomic():
+            # Get list of job IDs for updating company statistics later
+            job_ids = list(jobs_to_close.values_list("id", flatten=True))
+            company_ids = list(jobs_to_close.values_list("company_id", flatten=True))
+
+            # Update job status
+            jobs_to_close.update(status=JobStatus.CLOSED)
+
+            # Find pending applications for closed jobs
+            pending_applications = JobApplication.objects.filter(
+                job_id__in=job_ids,
+                status__in=[ApplicationStatus.PENDING, ApplicationStatus.REVIEWING],
+            )
+
+            # Reject pending applications
+            pending_applications.update(
+                status=ApplicationStatus.REJECTED,
+                note="Job has been automatically closed due to expired closing date",
+            )
+
+            # Update company statistics
+            for company_id in set(company_ids):
+                company_stats, created = CompanyStatistics.objects.get_or_create(
+                    company_id=company_id
                 )
+                company_stats.active_jobs = max(0, company_stats.active_jobs - 1)
+                company_stats.save()
 
-                jobs_closed += 1
-
-        # Return statistics
         return Response(
             {
-                "jobs_closed": jobs_closed,
-                "expiry_days": expiry_days,
-                "expiry_date": expiry_date.isoformat(),
-            },
-            status=status.HTTP_200_OK,
+                "detail": f"Successfully closed {jobs_count} jobs and rejected {pending_applications.count()} pending applications"
+            }
         )
 
 
@@ -410,51 +501,43 @@ class JobSaveView(APIView):
         # Kiểm tra job tồn tại
         job = get_object_or_404(Job, id=pk)
 
-        # Chỉ có thể lưu job được publish
+        # Chỉ có thể lưu job PUBLISHED
         if job.status != JobStatus.PUBLISHED:
             return Response(
                 {"detail": "Cannot save a job that is not published"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Lấy applicant profile
-        applicant_profile = request.user.applicant_profile
+        # Kiểm tra job đã được lưu chưa
+        applicant = request.user.applicant_profile
+        saved_job = SavedJob.objects.filter(applicant=applicant, job=job).first()
 
-        # Kiểm tra đã lưu chưa
-        if SavedJob.objects.filter(applicant=applicant_profile, job=job).exists():
+        if saved_job:
             return Response(
-                {"detail": "Job has already been saved"},
-                status=status.HTTP_400_BAD_REQUEST,
+                {"detail": "Job already saved"}, status=status.HTTP_400_BAD_REQUEST
             )
 
         # Lưu job
-        saved_job = SavedJob.objects.create(applicant=applicant_profile, job=job)
+        saved_job = SavedJob.objects.create(applicant=applicant, job=job)
+        serializer = SavedJobSerializer(saved_job)
 
-        # Trả về thông tin saved job
-        serializer = SavedJobSerializer(saved_job, context={"request": request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def delete(self, request, pk):
         # Kiểm tra job tồn tại
         job = get_object_or_404(Job, id=pk)
 
-        # Lấy applicant profile
-        applicant_profile = request.user.applicant_profile
+        # Tìm và xóa saved job trực tiếp
+        applicant = request.user.applicant_profile
+        result = SavedJob.objects.filter(applicant=applicant, job=job).delete()
 
-        # Kiểm tra đã lưu chưa
-        saved_job = SavedJob.objects.filter(
-            applicant=applicant_profile, job=job
-        ).first()
-        if not saved_job:
+        # Nếu không có bản ghi nào bị xóa
+        if result[0] == 0:
             return Response(
-                {"detail": "Job has not been saved"},
-                status=status.HTTP_400_BAD_REQUEST,
+                {"detail": "Job not saved"}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Xóa saved job
-        saved_job.delete()
-
-        # Trả về thông báo thành công
+        # Trả về phản hồi ngay lập tức
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -465,86 +548,124 @@ class JobStatisticsView(APIView):
 
     def get(self, request, pk):
         # Kiểm tra job tồn tại và quyền xem
-        job = get_object_or_404(
-            Job.objects.select_related("company", "recruiter").prefetch_related(
-                "views", "applications", "saved_by"
-            ),
-            id=pk,
-        )
-
-        # Kiểm tra quyền xem thống kê
+        job = get_object_or_404(Job, id=pk)
         self.check_object_permissions(request, job)
 
-        # Lấy số lượng view, application, saved
-        total_views = job.views.count()
-        total_applications = job.applications.count()
-        total_saved = job.saved_by.count()
+        # Lấy thống kê job
+        job_stats, created = JobStatistics.objects.get_or_create(job=job)
 
-        # Lấy thống kê theo ngày trong 30 ngày gần nhất
-        days_to_look_back = 30
-        today = timezone.now().date()
-        start_date = today - timezone.timedelta(
-            days=days_to_look_back - 1
-        )  # Including today
+        # Cập nhật thống kê nếu cần
+        if created or job_stats.application_count != job.applications.count():
+            job_stats.application_count = job.applications.count()
+            job_stats.accepted_count = job.applications.filter(
+                status=ApplicationStatus.ACCEPTED
+            ).count()
+            job_stats.rejected_count = job.applications.filter(
+                status=ApplicationStatus.REJECTED
+            ).count()
+            job_stats.save()
 
-        # Chuẩn bị dữ liệu theo ngày
-        date_stats = {}
-        for i in range(days_to_look_back):
-            current_date = start_date + timezone.timedelta(days=i)
-            date_stats[current_date.isoformat()] = {
-                "views": 0,
-                "applications": 0,
-                "saved": 0,
-            }
+        # Serialize và trả về kết quả
+        serializer = JobStatisticsSerializer(job_stats)
+        return Response(serializer.data)
 
-        # Tính view theo ngày
-        views_by_day = (
-            job.views.filter(viewed_at__date__gte=start_date)
-            .values("viewed_at__date")
-            .annotate(count=Count("id"))
+
+class CompanyJobsView(APIView):
+    """API to get all jobs for a specific company"""
+
+    permission_classes = [AllowAny]
+    pagination_class = CustomPagination
+
+    def get(self, request, company_id):
+        # Kiểm tra company tồn tại
+        company = get_object_or_404(CompanyProfile, user_id=company_id)
+
+        # Lấy danh sách job của company
+        queryset = Job.objects.filter(company=company)
+
+        # Chỉ hiển thị job PUBLISHED trừ khi người xem là company sở hữu
+        if (
+            not request.user.is_authenticated
+            or request.user.role != Role.COMPANY
+            or request.user.company_profile != company
+        ):
+            queryset = queryset.filter(status=JobStatus.PUBLISHED)
+
+        # Phân trang
+        paginator = self.pagination_class()
+        paginated_queryset = paginator.paginate_queryset(queryset, request)
+
+        # Serialize và trả về kết quả
+        serializer = JobSerializer(
+            paginated_queryset, many=True, context={"request": request}
         )
-        for item in views_by_day:
-            date_key = item["viewed_at__date"].isoformat()
-            if date_key in date_stats:
-                date_stats[date_key]["views"] = item["count"]
 
-        # Tính application theo ngày
-        applications_by_day = (
-            job.applications.filter(created_at__date__gte=start_date)
-            .values("created_at__date")
-            .annotate(count=Count("id"))
-        )
-        for item in applications_by_day:
-            date_key = item["created_at__date"].isoformat()
-            if date_key in date_stats:
-                date_stats[date_key]["applications"] = item["count"]
+        return paginator.get_paginated_response(serializer.data)
 
-        # Tính saved theo ngày
-        saved_by_day = (
-            job.saved_by.filter(created_at__date__gte=start_date)
-            .values("created_at__date")
-            .annotate(count=Count("id"))
-        )
-        for item in saved_by_day:
-            date_key = item["created_at__date"].isoformat()
-            if date_key in date_stats:
-                date_stats[date_key]["saved"] = item["count"]
 
-        # Trả về kết quả
-        return Response(
-            {
-                "job_id": job.id,
-                "job_title": job.title,
-                "job_status": job.status,
-                "totals": {
-                    "views": total_views,
-                    "applications": total_applications,
-                    "saved": total_saved,
-                },
-                "daily_stats": date_stats,
-            },
-            status=status.HTTP_200_OK,
+class CompanyStatisticsView(APIView):
+    """API to get statistics about a company"""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, company_id):
+        # Kiểm tra company tồn tại
+        company = get_object_or_404(CompanyProfile, user_id=company_id)
+
+        # Kiểm tra quyền xem
+        if request.user.role != Role.ADMIN and (
+            request.user.role != Role.COMPANY or request.user.company_profile != company
+        ):
+            return Response(
+                {"detail": "You do not have permission to view these statistics"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Lấy hoặc tạo thống kê công ty
+        company_stats, created = CompanyStatistics.objects.get_or_create(
+            company=company
         )
+
+        # Cập nhật thống kê nếu cần
+        if created:
+            with transaction.atomic():
+                # Tính toán các số liệu thống kê
+                total_jobs = Job.objects.filter(company=company).count()
+                active_jobs = Job.objects.filter(
+                    company=company, status=JobStatus.PUBLISHED
+                ).count()
+
+                # Tổng số đơn ứng tuyển
+                job_ids = Job.objects.filter(company=company).values_list(
+                    "id", flat=True
+                )
+                total_applications = JobApplication.objects.filter(
+                    job_id__in=job_ids
+                ).count()
+
+                # Số lượng ứng viên được nhận
+                hired_applicants = JobApplication.objects.filter(
+                    job_id__in=job_ids, status=ApplicationStatus.ACCEPTED
+                ).count()
+
+                # Tỷ lệ tuyển dụng thành công
+                average_hire_rate = (
+                    hired_applicants / total_applications
+                    if total_applications > 0
+                    else 0
+                )
+
+                # Cập nhật thống kê
+                company_stats.total_jobs = total_jobs
+                company_stats.active_jobs = active_jobs
+                company_stats.total_applications = total_applications
+                company_stats.hired_applicants = hired_applicants
+                company_stats.average_hire_rate = average_hire_rate
+                company_stats.save()
+
+        # Serialize và trả về kết quả
+        serializer = CompanyStatisticsSerializer(company_stats)
+        return Response(serializer.data)
 
 
 class SavedJobListView(APIView):
@@ -555,10 +676,9 @@ class SavedJobListView(APIView):
 
     def get(self, request):
         # Lấy danh sách saved jobs của applicant hiện tại
-        queryset = (
-            SavedJob.objects.filter(applicant=request.user.applicant_profile)
-            .select_related("job", "job__company")
-            .order_by("-created_at")
+        applicant = request.user.applicant_profile
+        queryset = SavedJob.objects.filter(applicant=applicant).select_related(
+            "job", "job__company"
         )
 
         # Phân trang
@@ -581,24 +701,19 @@ class ApplicantSavedJobsView(APIView):
 
     def get(self, request, applicant_id):
         # Kiểm tra quyền xem
-        if str(request.user.id) != applicant_id and request.user.role != Role.ADMIN:
+        if request.user.role != Role.ADMIN and (
+            request.user.role != Role.APPLICANT
+            or str(request.user.id) != str(applicant_id)
+        ):
             return Response(
-                {
-                    "detail": "You don't have permission to view this applicant's saved jobs"
-                },
+                {"detail": "You do not have permission to view these saved jobs"},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Lấy applicant profile
-        applicant_profile = get_object_or_404(
-            ApplicantProfile.objects.select_related("user"), user_id=applicant_id
-        )
-
-        # Lấy danh sách saved jobs
-        queryset = (
-            SavedJob.objects.filter(applicant=applicant_profile)
-            .select_related("job", "job__company")
-            .order_by("-created_at")
+        # Lấy danh sách saved jobs của applicant
+        applicant = get_object_or_404(ApplicantProfile, user_id=applicant_id)
+        queryset = SavedJob.objects.filter(applicant=applicant).select_related(
+            "job", "job__company"
         )
 
         # Phân trang

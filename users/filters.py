@@ -26,10 +26,19 @@ class ApplicantFilter(BaseUserFilter):
         fields = BaseUserFilter.Meta.fields + ["gender"]
 
 
-class RecruiterFilter(BaseUserFilter):
-    company = filters.CharFilter(
-        field_name="recruiter_profile__company__name", lookup_expr="icontains"
+class CompanyFilter(BaseUserFilter):
+    name = filters.CharFilter(
+        field_name="company_profile__name", lookup_expr="icontains"
+    )
+    industry = filters.CharFilter(
+        field_name="company_profile__industries__name", lookup_expr="icontains"
+    )
+    location = filters.CharFilter(
+        field_name="company_profile__locations__city", lookup_expr="icontains"
+    )
+    skill = filters.CharFilter(
+        field_name="company_profile__skills__name", lookup_expr="icontains"
     )
 
     class Meta(BaseUserFilter.Meta):
-        fields = BaseUserFilter.Meta.fields + ["company"]
+        fields = BaseUserFilter.Meta.fields + ["name", "industry", "location", "skill"]

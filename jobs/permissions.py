@@ -2,9 +2,9 @@ from rest_framework import permissions
 from users.choices import Role, JobStatus
 
 
-class IsRecruiterOrReadOnly(permissions.BasePermission):
+class IsCompanyOrReadOnly(permissions.BasePermission):
     """
-    Cho phép nhà tuyển dụng sửa đổi, những người khác chỉ được xem.
+    Cho phép công ty sửa đổi, những người khác chỉ được xem.
     """
 
     def has_permission(self, request, view):
@@ -12,54 +12,54 @@ class IsRecruiterOrReadOnly(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
 
-        # Yêu cầu phương thức khác chỉ cho nhà tuyển dụng
-        return request.user.is_authenticated and request.user.role == Role.RECRUITER
+        # Yêu cầu phương thức khác chỉ cho công ty
+        return request.user.is_authenticated and request.user.role == Role.COMPANY
 
     def has_object_permission(self, request, view, obj):
         # Cho phép GET, HEAD, OPTIONS cho tất cả người dùng
         if request.method in permissions.SAFE_METHODS:
             return True
 
-        # Nhà tuyển dụng chỉ sửa job của công ty họ
+        # Công ty chỉ sửa job của họ
         return (
             request.user.is_authenticated
-            and request.user.role == Role.RECRUITER
-            and obj.company == request.user.recruiter_profile.company
+            and request.user.role == Role.COMPANY
+            and obj.company == request.user.company_profile
         )
 
 
 class IsJobOwner(permissions.BasePermission):
     """
-    Chỉ cho phép nhà tuyển dụng sở hữu job thao tác với job.
+    Chỉ cho phép công ty sở hữu job thao tác với job.
     """
 
     def has_object_permission(self, request, view, obj):
-        # Chỉ nhà tuyển dụng được thao tác
-        if not request.user.is_authenticated or request.user.role != Role.RECRUITER:
+        # Chỉ công ty được thao tác
+        if not request.user.is_authenticated or request.user.role != Role.COMPANY:
             return False
 
-        # Kiểm tra xem nhà tuyển dụng có thuộc công ty sở hữu job không
-        return obj.company == request.user.recruiter_profile.company
+        # Kiểm tra xem công ty có sở hữu job không
+        return obj.company == request.user.company_profile
 
 
 class IsJobCreator(permissions.BasePermission):
     """
-    Chỉ cho phép recruiter thuộc công ty của job để chỉnh sửa hoặc xóa job đó.
+    Chỉ cho phép công ty sở hữu job để chỉnh sửa hoặc xóa job đó.
     """
 
     def has_object_permission(self, request, view, obj):
-        # Chỉ recruiter thuộc cùng công ty với job được chỉnh sửa hoặc xóa
+        # Chỉ công ty sở hữu job được chỉnh sửa hoặc xóa
         return (
             request.user.is_authenticated
-            and request.user.role == Role.RECRUITER
-            and obj.company == request.user.recruiter_profile.company
+            and request.user.role == Role.COMPANY
+            and obj.company == request.user.company_profile
         )
 
 
 class CanViewJob(permissions.BasePermission):
     """
     Quyền xem job dựa trên trạng thái.
-    Job DRAFT chỉ có thể được xem bởi recruiter thuộc công ty của job hoặc admin.
+    Job DRAFT chỉ có thể được xem bởi công ty sở hữu job hoặc admin.
     Job PUBLISHED và CLOSED có thể được xem bởi tất cả mọi người.
     """
 
@@ -68,15 +68,15 @@ class CanViewJob(permissions.BasePermission):
         if request.user.is_authenticated and request.user.role == Role.ADMIN:
             return True
 
-        # Nhà tuyển dụng thuộc công ty sở hữu job luôn có quyền xem
+        # Công ty sở hữu job luôn có quyền xem
         if (
             request.user.is_authenticated
-            and request.user.role == Role.RECRUITER
-            and obj.company == request.user.recruiter_profile.company
+            and request.user.role == Role.COMPANY
+            and obj.company == request.user.company_profile
         ):
             return True
 
-        # Nếu job là DRAFT, chỉ recruiter thuộc công ty mới xem được (đã xử lý ở trên)
+        # Nếu job là DRAFT, chỉ công ty sở hữu mới xem được (đã xử lý ở trên)
         if obj.status == JobStatus.DRAFT:
             return False
 
@@ -84,9 +84,9 @@ class CanViewJob(permissions.BasePermission):
         return True
 
 
-class IsApplicationOwnerOrJobRecruiter(permissions.BasePermission):
+class IsApplicationOwnerOrJobCompany(permissions.BasePermission):
     """
-    Cho phép ứng viên xem đơn của họ, nhà tuyển dụng xem và cập nhật đơn cho job của họ.
+    Cho phép ứng viên xem đơn của họ, công ty xem và cập nhật đơn cho job của họ.
     """
 
     def has_object_permission(self, request, view, obj):
@@ -100,9 +100,9 @@ class IsApplicationOwnerOrJobRecruiter(permissions.BasePermission):
                 and request.method in permissions.SAFE_METHODS
             )
 
-        # Nhà tuyển dụng xem và cập nhật đơn cho job của công ty họ
-        if request.user.role == Role.RECRUITER:
-            return obj.job.company == request.user.recruiter_profile.company
+        # Công ty xem và cập nhật đơn cho job của họ
+        if request.user.role == Role.COMPANY:
+            return obj.job.company == request.user.company_profile
 
         # Admin có toàn quyền
         if request.user.role == Role.ADMIN:
@@ -120,13 +120,13 @@ class IsApplicant(permissions.BasePermission):
         return request.user.is_authenticated and request.user.role == Role.APPLICANT
 
 
-class IsRecruiter(permissions.BasePermission):
+class IsCompany(permissions.BasePermission):
     """
-    Chỉ cho phép nhà tuyển dụng thực hiện hành động.
+    Chỉ cho phép công ty thực hiện hành động.
     """
 
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == Role.RECRUITER
+        return request.user.is_authenticated and request.user.role == Role.COMPANY
 
 
 class IsSavedJobOwner(permissions.BasePermission):

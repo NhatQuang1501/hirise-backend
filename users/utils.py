@@ -173,7 +173,7 @@ class CustomPagination(PageNumberPagination):
                 "previous": self.get_previous_link(),  # Link to previous page
                 "current_page": self.page.number,  # Current page
                 "total_pages": self.page.paginator.num_pages,  # Total number of pages
-                "results": data,  # Data for current page
+                "data": data,  # Data for current page
             },
             status=status.HTTP_200_OK,
         )

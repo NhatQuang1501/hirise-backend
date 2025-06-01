@@ -1,5 +1,5 @@
 from django.urls import path
-from users.views.user_views import ApplicantView, RecruiterView
+from users.views.user_views import ApplicantView, CompanyView
 from users.views.authentication_views import (
     RegisterView,
     OTPVerifyView,
@@ -9,13 +9,14 @@ from users.views.authentication_views import (
     OTPVerifyView,
     HomeView,
 )
+from rest_framework_simplejwt.views import TokenRefreshView
 
 urlpatterns = [
     # Users endpoints
     path("applicants/", ApplicantView.as_view(), name="applicant-list"),
     path("applicants/<uuid:pk>/", ApplicantView.as_view(), name="applicant-detail"),
-    path("recruiters/", RecruiterView.as_view(), name="recruiter-list"),
-    path("recruiters/<uuid:pk>/", RecruiterView.as_view(), name="recruiter-detail"),
+    path("companies/", CompanyView.as_view(), name="company-list"),
+    path("companies/<uuid:pk>/", CompanyView.as_view(), name="company-detail"),
     # Authentication endpoints
     path("auth/register/", RegisterView.as_view(), name="register"),
     path("auth/verify-otp/", OTPVerifyView.as_view(), name="verify-otp"),

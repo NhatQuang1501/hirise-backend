@@ -8,18 +8,18 @@ class UserAdmin(admin.ModelAdmin):
 
 
 class ApplicantProfileAdmin(admin.ModelAdmin):
-    list_display = ["user", "fullname"]
+    list_display = ["user", "full_name"]
 
 
-class RecruiterProfileAdmin(admin.ModelAdmin):
-    list_display = ["user", "fullname", "company"]
+class CompanyProfileAdmin(admin.ModelAdmin):
+    list_display = ["user", "name"]
 
 
 class SocialLinkAdmin(admin.ModelAdmin):
-    list_display = ["profile", "platform", "url"]
+    list_display = ["user", "platform", "url"]
 
 
 admin.site.register(User, UserAdmin)
 admin.site.register(ApplicantProfile, ApplicantProfileAdmin)
-admin.site.register(RecruiterProfile, RecruiterProfileAdmin)
+admin.site.register(CompanyProfile, CompanyProfileAdmin)
 admin.site.register(SocialLink, SocialLinkAdmin)

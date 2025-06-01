@@ -11,6 +11,8 @@ from jobs.views.job_views import (
     JobStatisticsView,
     SavedJobListView,
     ApplicantSavedJobsView,
+    CompanyJobsView,
+    CompanyStatisticsView,
 )
 from jobs.views.job_application_views import (
     JobApplicationListView,
@@ -19,6 +21,8 @@ from jobs.views.job_application_views import (
     JobApplicationUpdateStatusView,
     JobApplicationsForJobView,
     ApplicantApplicationsView,
+    InterviewScheduleView,
+    CVReviewView,
 )
 
 app_name = "jobs"
@@ -39,6 +43,17 @@ urlpatterns = [
     path("jobs/<uuid:pk>/save/", JobSaveView.as_view(), name="job-save"),
     path(
         "jobs/<uuid:pk>/statistics/", JobStatisticsView.as_view(), name="job-statistics"
+    ),
+    # Company jobs and statistics
+    path(
+        "companies/<uuid:company_id>/jobs/",
+        CompanyJobsView.as_view(),
+        name="company-jobs",
+    ),
+    path(
+        "companies/<uuid:company_id>/statistics/",
+        CompanyStatisticsView.as_view(),
+        name="company-statistics",
     ),
     # Saved job endpoints
     path("saved-jobs/", SavedJobListView.as_view(), name="saved-job-list"),
@@ -73,5 +88,17 @@ urlpatterns = [
         "applicants/<uuid:applicant_id>/applications/",
         ApplicantApplicationsView.as_view(),
         name="applicant-applications",
+    ),
+    # Interview schedule endpoints
+    path(
+        "applications/<uuid:application_id>/interview/",
+        InterviewScheduleView.as_view(),
+        name="interview-schedule",
+    ),
+    # CV review endpoints
+    path(
+        "applications/<uuid:application_id>/cv-review/",
+        CVReviewView.as_view(),
+        name="cv-review",
     ),
 ]

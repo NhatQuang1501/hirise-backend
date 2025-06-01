@@ -2,7 +2,6 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser, Group, Permission
 from users.choices import *
 import uuid
-from jobs.models import Company
 
 
 class User(AbstractUser):
@@ -10,7 +9,7 @@ class User(AbstractUser):
 
     email = models.EmailField(max_length=100, unique=True)
     username = models.CharField(max_length=100, unique=True)
-    password = models.CharField(max_length=64)
+    password = models.CharField(max_length=100)
     role = models.CharField(
         max_length=10,
         choices=Role.choices,
@@ -26,16 +25,16 @@ class User(AbstractUser):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    groups = models.ManyToManyField(
-        Group,
-        related_name="custom_user_set",
-        blank=True,
-    )
-    user_permissions = models.ManyToManyField(
-        Permission,
-        related_name="custom_user_set",
-        blank=True,
-    )
+    # groups = models.ManyToManyField(
+    #     Group,
+    #     related_name="custom_user_set",
+    #     blank=True,
+    # )
+    # user_permissions = models.ManyToManyField(
+    #     Permission,
+    #     related_name="custom_user_set",
+    #     blank=True,
+    # )
 
     def __str__(self):
         return self.username
@@ -53,6 +52,7 @@ class ApplicantProfile(models.Model):
     )
 
     full_name = models.CharField(max_length=100, blank=True)
+    date_of_birth = models.DateField(blank=True, null=True)
     gender = models.CharField(
         max_length=10,
         choices=Gender.choices,
@@ -71,32 +71,51 @@ class ApplicantProfile(models.Model):
         return self.user.id
 
     @property
-    def social_links_dict(self):
-        return {link.platform: link.url for link in self.user.social_links.all()}
+    def social_links_data(self):
+        return [
+            {
+                "platform": link.platform,
+                "url": link.url,
+                "custom_label": link.custom_label,
+            }
+            for link in self.user.social_links.all()
+        ]
 
 
-class RecruiterProfile(models.Model):
+class CompanyProfile(models.Model):
     user = models.OneToOneField(
         User,
         on_delete=models.CASCADE,
-        related_name="recruiter_profile",
+        related_name="company_profile",
     )
-    company = models.ForeignKey(
-        Company,
-        on_delete=models.CASCADE,
-        related_name="recruiters",
-        blank=True,
-        null=True,
-    )
+    name = models.CharField(max_length=50)
+    website = models.URLField(blank=True)
+    logo = models.ImageField(upload_to="company_logos/", blank=True)
+    description = models.TextField(blank=True)
+    benefits = models.TextField(blank=True)
+    founded_year = models.IntegerField(blank=True, null=True)
 
-    full_name = models.CharField(max_length=100, blank=True)
-    phone_number = models.CharField(max_length=20, blank=True)
+    locations = models.ManyToManyField(
+        "jobs.Location",
+        related_name="company_profiles",
+        blank=True,
+    )
+    industries = models.ManyToManyField(
+        "jobs.Industry",
+        related_name="company_profiles",
+        blank=True,
+    )
+    skills = models.ManyToManyField(
+        "jobs.SkillTag",
+        related_name="company_profiles",
+        blank=True,
+    )
 
     def __str__(self):
-        return f"{self.user.username} - {self.full_name}"
+        return f"{self.user.username} - {self.name}"
 
     @property
-    def recruiter_id(self):
+    def company_id(self):
         return self.user.id
 
     @property

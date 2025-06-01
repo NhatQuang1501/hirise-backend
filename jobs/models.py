@@ -8,13 +8,13 @@ from django.conf import settings
 
 class Location(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    city = models.CharField(max_length=100)
+    address = models.TextField()  # Trường chính để lưu địa chỉ đầy đủ
     country = models.CharField(max_length=100, blank=True, default="Vietnam")
-    address = models.TextField(blank=True)
     description = models.TextField(blank=True)
+    city = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
-        return self.city
+        return self.address
 
     @property
     def location_id(self):
@@ -46,58 +46,12 @@ class SkillTag(models.Model):
         return self.id
 
 
-class Company(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    email = models.EmailField(max_length=100, unique=True)
-    name = models.CharField(max_length=50)
-    website = models.URLField(blank=True)
-    logo = models.ImageField(upload_to="company_logos/", blank=True)
-    description = models.TextField(blank=True)
-    benefits = models.TextField(blank=True)
-    founded_year = models.IntegerField(blank=True, null=True)
-
-    locations = models.ManyToManyField(
-        Location,
-        related_name="companies",
-        blank=True,
-    )
-
-    industries = models.ManyToManyField(
-        Industry,
-        related_name="companies",
-        blank=True,
-    )
-    # Tag kỹ năng liên quan đến công ty
-    skills = models.ManyToManyField(
-        SkillTag,
-        related_name="companies",
-        blank=True,
-    )
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return self.name
-
-    @property
-    def company_id(self):
-        return self.id
-
-
 class Job(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     company = models.ForeignKey(
-        Company,
+        "users.CompanyProfile",
         on_delete=models.CASCADE,
         related_name="company_jobs",
-    )
-    # Sử dụng string để tránh circular import
-    recruiter = models.ForeignKey(
-        "users.RecruiterProfile",
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name="posted_jobs",
     )
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
@@ -120,6 +74,11 @@ class Job(models.Model):
         choices=ExperienceLevel.choices,
         blank=True,
     )
+    city = models.CharField(
+        max_length=20,
+        choices=City.choices,
+        blank=True,
+    )
 
     min_salary = models.IntegerField(blank=True, null=True)
     max_salary = models.IntegerField(blank=True, null=True)
@@ -130,6 +89,23 @@ class Job(models.Model):
     )
     is_salary_negotiable = models.BooleanField(default=True)
     closed_date = models.DateField(blank=True, null=True)
+
+    # Thêm các liên kết
+    locations = models.ManyToManyField(
+        Location,
+        related_name="jobs",
+        blank=True,
+    )
+    industries = models.ManyToManyField(
+        Industry,
+        related_name="jobs",
+        blank=True,
+    )
+    skills = models.ManyToManyField(
+        SkillTag,
+        related_name="jobs",
+        blank=True,
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -152,16 +128,6 @@ class Job(models.Model):
         elif self.max_salary:
             return f"Up to {self.max_salary:,} {self.currency}"
         return "Not specified"
-
-    def clean(self):
-        # Đảm bảo rằng recruiter tạo job phải thuộc công ty của job
-        if self.recruiter and self.company:
-            if self.recruiter.company != self.company:
-                raise ValidationError("Recruiter phải thuộc cùng công ty với job.")
-
-    def save(self, *args, **kwargs):
-        self.clean()
-        super().save(*args, **kwargs)
 
 
 class SavedJob(models.Model):
@@ -244,25 +210,33 @@ class CVReview(models.Model):
         return f"Review for {self.application}"
 
 
-# class JobView(models.Model):
-#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-#     job = models.ForeignKey(
-#         Job,
-#         on_delete=models.CASCADE,
-#         related_name="views",
-#     )
-#     # Sử dụng settings.AUTH_USER_MODEL để tránh circular import
-#     user = models.ForeignKey(
-#         settings.AUTH_USER_MODEL,
-#         on_delete=models.SET_NULL,
-#         null=True,
-#         blank=True,
-#     )
-#     viewed_at = models.DateTimeField(auto_now_add=True)
+class JobStatistics(models.Model):
+    job = models.OneToOneField(
+        Job,
+        on_delete=models.CASCADE,
+        related_name="statistics",
+    )
+    view_count = models.IntegerField(default=0)
+    application_count = models.IntegerField(default=0)
+    accepted_count = models.IntegerField(default=0)
+    rejected_count = models.IntegerField(default=0)
+    average_processing_time = models.DurationField(null=True, blank=True)
 
-#     def __str__(self):
-#         return f"Viewed {self.job.title} at {self.viewed_at}"
+    def __str__(self):
+        return f"Statistics for {self.job.title}"
 
-#     @property
-#     def jobView_id(self):
-#         return self.id
+
+class CompanyStatistics(models.Model):
+    company = models.OneToOneField(
+        "users.CompanyProfile",
+        on_delete=models.CASCADE,
+        related_name="statistics",
+    )
+    total_jobs = models.IntegerField(default=0)
+    active_jobs = models.IntegerField(default=0)
+    total_applications = models.IntegerField(default=0)
+    hired_applicants = models.IntegerField(default=0)
+    average_hire_rate = models.FloatField(default=0)
+
+    def __str__(self):
+        return f"Statistics for {self.company.name}"

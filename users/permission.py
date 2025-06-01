@@ -24,8 +24,8 @@ class IsApplicant(RoleBasedPermission):
     allowed_role = Role.APPLICANT
 
 
-class IsRecruiter(RoleBasedPermission):
-    allowed_role = Role.RECRUITER
+class IsCompany(RoleBasedPermission):
+    allowed_role = Role.COMPANY
 
 
 class IsAdmin(RoleBasedPermission):

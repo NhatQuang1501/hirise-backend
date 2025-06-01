@@ -51,7 +51,7 @@ INSTALLED_APPS = [
     "django_filters",
     "users",
     "jobs",
-    "application",
+    # "notification",
 ]
 
 MIDDLEWARE = [
@@ -97,6 +97,10 @@ DATABASES = {
         "PASSWORD": os.environ.get("DB_PASSWORD"),
         "HOST": os.environ.get("DB_HOST"),
         "PORT": os.environ.get("DB_PORT"),
+        "CONN_MAX_AGE": None,  # Persistent connections
+        "OPTIONS": {
+            "connect_timeout": 10,
+        },
     }
 }
 
@@ -151,9 +155,15 @@ CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": "rest_framework_simplejwt.authentication.JWTAuthentication",
-    "DEFAULT_PERMISSION_CLASSES": "rest_framework.permissions.IsAuthenticated",
-    "DEFAULT_FILTER_BACKENDS": "django_filters.rest_framework.DjangoFilterBackend",
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+    ],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 10,
     # Tối ưu serializer
@@ -163,8 +173,8 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(days=1),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=2),
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=5),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=10),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
@@ -174,21 +184,16 @@ SIMPLE_JWT = {
 
 # Email settings
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER")
-EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD")
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = os.getenv("EMAIL_PORT")
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
 
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "unique-otp",
-        "TIMEOUT": 300,  # 5 phút
-        "OPTIONS": {
-            "MAX_ENTRIES": 1000,  # Giới hạn số lượng entries
-            "CULL_FREQUENCY": 3,  # Tỷ lệ xóa khi đạt MAX_ENTRIES
-        },
+        "LOCATION": "active_connections_cache",
     }
 }
 
@@ -202,7 +207,7 @@ CACHES = {
 #     }
 # }
 
-# Cấu hình thời gian sống của OTP trong cache ( phút)
+# Cấu hình thời gian sống của OTP trong cache (phút)
 OTP_EXPIRY_TIME = 5 * 60  # seconds
 
 TEMPLATE_LOADERS = (
@@ -215,12 +220,6 @@ TEMPLATE_LOADERS = (
     ),
 )
 
-# Optimize database query
-DATABASE_ROUTERS = []
-DATABASE_OPTIONS = {"timeout": 20}
-CONN_MAX_AGE = 600  # 10 phút
-
-
 SWAGGER_SETTINGS = {
     "SECURITY_DEFINITIONS": {
         "Bearer": {"type": "apiKey", "name": "Authorization", "in": "header"}
@@ -230,3 +229,7 @@ SWAGGER_SETTINGS = {
     "REFETCH_SCHEMA_WITH_AUTH": True,
     "REFETCH_SCHEMA_ON_LOGOUT": True,
 }
+
+# Thêm vào settings.py
+USE_I18N = False  # Tắt internationalization nếu không cần thiết
+USE_L10N = False  # Tắt localization nếu không cần thiết

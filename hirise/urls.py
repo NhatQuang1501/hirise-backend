@@ -8,11 +8,11 @@ from drf_yasg import openapi
 
 schema_view = get_schema_view(
     openapi.Info(
-        title="API Documentation",
+        title="Hirise API Documentation",
         default_version="v1",
-        description="API documentation for job portal",
+        description="API documentation for Hirise job portal",
         terms_of_service="https://www.google.com/policies/terms/",
-        contact=openapi.Contact(email="contact@example.com"),
+        contact=openapi.Contact(email="contact@hirise.example.com"),
         license=openapi.License(name="BSD License"),
     ),
     public=True,
@@ -36,7 +36,7 @@ urlpatterns = [
     # API URLs
     path("api/", include("users.urls")),
     path("api/", include("jobs.urls")),
-    # Các app khác...
+    # path("api/", include("notification.urls", namespace="notification")),
 ]
 
 if settings.DEBUG:

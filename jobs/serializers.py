@@ -1,12 +1,16 @@
 from rest_framework import serializers
+from users.models import CompanyProfile
 from jobs.models import (
     Job,
-    Company,
     Location,
     Industry,
     SkillTag,
     JobApplication,
     SavedJob,
+    JobStatistics,
+    CompanyStatistics,
+    InterviewSchedule,
+    CVReview,
 )
 from users.choices import (
     JobStatus,
@@ -19,7 +23,7 @@ from users.choices import (
 from users.serializers import (
     UserSerializer,
     ApplicantProfileSerializer,
-    RecruiterProfileSerializer,
+    CompanyProfileSerializer,
 )
 from django.db import transaction
 from django.utils import timezone
@@ -28,7 +32,7 @@ from django.utils import timezone
 class LocationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Location
-        fields = ["id", "city", "country", "address", "description"]
+        fields = ["id", "address", "country", "description"]
         read_only_fields = ["id"]
 
 
@@ -46,46 +50,33 @@ class SkillTagSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
 
-class CompanySerializer(serializers.ModelSerializer):
-    locations = LocationSerializer(many=True, read_only=True)
-    industries = IndustrySerializer(many=True, read_only=True)
-    skills = SkillTagSerializer(many=True, read_only=True)
-
+class CompanyProfileMiniSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Company
-        fields = [
-            "id",
-            "name",
-            "email",
-            "website",
-            "logo",
-            "description",
-            "benefits",
-            "founded_year",
-            "locations",
-            "industries",
-            "skills",
-            "created_at",
-        ]
-        read_only_fields = ["id", "created_at"]
-
-    def __init__(self, *args, **kwargs):
-        fields = kwargs.pop("fields", None)
-        super().__init__(*args, **kwargs)
-
-        if fields is not None:
-            allowed = set(fields)
-            existing = set(self.fields)
-            for field_name in existing - allowed:
-                self.fields.pop(field_name)
+        model = CompanyProfile
+        fields = ("name", "logo", "website")
 
 
 class JobSerializer(serializers.ModelSerializer):
-    company = CompanySerializer(read_only=True)
-    recruiter = RecruiterProfileSerializer(read_only=True)
+    company = CompanyProfileSerializer(read_only=True)
+    company_name = serializers.SerializerMethodField()
     status_display = serializers.SerializerMethodField()
     application_count = serializers.SerializerMethodField()
     is_saved = serializers.SerializerMethodField()
+    saved_count = serializers.SerializerMethodField()
+    locations = LocationSerializer(many=True, read_only=True)
+    industries = IndustrySerializer(many=True, read_only=True)
+    skills = SkillTagSerializer(many=True, read_only=True)
+    city_display = serializers.SerializerMethodField()
+
+    location_names = serializers.ListField(
+        child=serializers.CharField(max_length=255), write_only=True, required=False
+    )
+    industry_names = serializers.ListField(
+        child=serializers.CharField(max_length=100), write_only=True, required=False
+    )
+    skill_names = serializers.ListField(
+        child=serializers.CharField(max_length=100), write_only=True, required=False
+    )
 
     class Meta:
         model = Job
@@ -93,7 +84,7 @@ class JobSerializer(serializers.ModelSerializer):
             "id",
             "title",
             "company",
-            "recruiter",
+            "company_name",
             "description",
             "responsibilities",
             "requirements",
@@ -102,27 +93,38 @@ class JobSerializer(serializers.ModelSerializer):
             "status_display",
             "job_type",
             "experience_level",
+            "city",
+            "city_display",
             "min_salary",
             "max_salary",
             "currency",
             "is_salary_negotiable",
             "salary_display",
             "closed_date",
+            "locations",
+            "industries",
+            "skills",
+            "location_names",
+            "industry_names",
+            "skill_names",
             "created_at",
             "updated_at",
             "application_count",
             "is_saved",
+            "saved_count",
         ]
         read_only_fields = [
             "id",
             "company",
-            "recruiter",
+            "company_name",
             "created_at",
             "updated_at",
             "status_display",
+            "city_display",
             "salary_display",
             "application_count",
             "is_saved",
+            "saved_count",
         ]
 
     def __init__(self, *args, **kwargs):
@@ -137,12 +139,18 @@ class JobSerializer(serializers.ModelSerializer):
                 self.fields.pop(field_name)
 
         if "company" in self.fields and company_fields is not None:
-            self.fields["company"] = CompanySerializer(
-                read_only=True, fields=company_fields
+            self.fields["company"] = CompanyProfileMiniSerializer(
+                source="company.company_profile", read_only=True
             )
+
+    def get_company_name(self, obj):
+        return obj.company.name if obj.company else None
 
     def get_status_display(self, obj):
         return obj.get_status_display()
+
+    def get_city_display(self, obj):
+        return obj.get_city_display() if obj.city else None
 
     def get_application_count(self, obj):
         return obj.applications.count()
@@ -158,6 +166,10 @@ class JobSerializer(serializers.ModelSerializer):
                 applicant=request.user.applicant_profile, job=obj
             ).exists()
         return False
+
+    def get_saved_count(self, obj):
+        # Đếm số lượng người đã lưu công việc này
+        return obj.saved_by.count()
 
     def validate(self, data):
         # Validate min_salary & max_salary
@@ -181,7 +193,16 @@ class JobSerializer(serializers.ModelSerializer):
 
         # Validate required fields when publishing
         if status == JobStatus.PUBLISHED:
-            required_fields = ["title", "description", "job_type", "experience_level"]
+            required_fields = [
+                "title",
+                "description",
+                "responsibilities",
+                "requirements",
+                "benefits",
+                "job_type",
+                "experience_level",
+                "city",
+            ]
             for field in required_fields:
                 field_value = data.get(field)
                 if not field_value:
@@ -215,23 +236,46 @@ class JobSerializer(serializers.ModelSerializer):
         if (
             request
             and request.user.is_authenticated
-            and request.user.role == Role.RECRUITER
+            and request.user.role == Role.COMPANY
         ):
-            # Lấy recruiter profile và company
-            recruiter_profile = request.user.recruiter_profile
-            company = recruiter_profile.company
+            # Lấy company profile
+            company_profile = request.user.company_profile
 
-            # Kiểm tra recruiter có thuộc company không
-            if not company:
-                raise serializers.ValidationError(
-                    "Recruiter is not assigned to any company"
-                )
+            # Kiểm tra company profile tồn tại
+            if not company_profile:
+                raise serializers.ValidationError("Invalid company profile")
 
-            # Tạo job với company và recruiter
-            validated_data["company"] = company
-            validated_data["recruiter"] = recruiter_profile
+            # Tạo job với company
+            validated_data["company"] = company_profile
 
-        return super().create(validated_data)
+            # Get location names
+            location_names = validated_data.pop("location_names", [])
+            # Get industry names
+            industry_names = validated_data.pop("industry_names", [])
+            # Get skill names
+            skill_names = validated_data.pop("skill_names", [])
+
+            # Create job
+            job = super().create(validated_data)
+
+            # Process locations
+            if location_names:
+                self._process_locations(job, location_names)
+
+            # Process industries
+            if industry_names:
+                self._process_industries(job, industry_names)
+
+            # Process skills
+            if skill_names:
+                self._process_skills(job, skill_names)
+
+            # Create job statistics
+            JobStatistics.objects.create(job=job)
+
+            return job
+
+        raise serializers.ValidationError("Only companies can create jobs")
 
     def update(self, instance, validated_data):
         # Cập nhật closed_date khi chuyển sang CLOSED
@@ -244,10 +288,27 @@ class JobSerializer(serializers.ModelSerializer):
             # Từ chối các đơn ứng tuyển chưa xử lý
             self._reject_pending_applications(instance)
 
-        # Đối với job published, nếu chỉnh sửa sẽ tự động chuyển về draft
-        # (Đã xử lý ở validate)
+        # Get location names
+        location_names = validated_data.pop("location_names", None)
+        # Get industry names
+        industry_names = validated_data.pop("industry_names", None)
+        # Get skill names
+        skill_names = validated_data.pop("skill_names", None)
 
-        return super().update(instance, validated_data)
+        # Update job
+        job = super().update(instance, validated_data)
+
+        # Update m2m relationships
+        if location_names is not None:
+            self._process_locations(job, location_names)
+
+        if industry_names is not None:
+            self._process_industries(job, industry_names)
+
+        if skill_names is not None:
+            self._process_skills(job, skill_names)
+
+        return job
 
     def _reject_pending_applications(self, job):
         """Reject all pending applications when job is closed"""
@@ -257,8 +318,59 @@ class JobSerializer(serializers.ModelSerializer):
             )
             pending_applications.update(
                 status=ApplicationStatus.REJECTED,
-                note="Job has been closed by the recruiter",
+                note="Job has been closed by the company",
             )
+
+    def _process_locations(self, job, location_names):
+        """Process location names and link them to job"""
+        locations = []
+        for location_name in location_names:
+            if not location_name:
+                continue
+            # Tìm hoặc tạo location
+            location, created = Location.objects.get_or_create(
+                address=location_name.strip(), defaults={"country": "Vietnam"}
+            )
+            locations.append(location)
+
+        # Xóa locations hiện tại và thêm locations mới
+        job.locations.clear()
+        if locations:
+            job.locations.add(*locations)
+
+    def _process_industries(self, job, industry_names):
+        """Process industry names and link them to job"""
+        industries = []
+        for industry_name in industry_names:
+            if not industry_name:
+                continue
+            # Tìm hoặc tạo industry
+            industry, created = Industry.objects.get_or_create(
+                name=industry_name.strip()
+            )
+            industries.append(industry)
+
+        # Xóa industries hiện tại và thêm industries mới
+        job.industries.clear()
+        if industries:
+            job.industries.add(*industries)
+
+    def _process_skills(self, job, skill_names):
+        """Process skill names and link them to job"""
+        skills = []
+        for skill_name in skill_names:
+            if not skill_name:
+                continue
+            # Tìm hoặc tạo skill
+            skill, created = SkillTag.objects.get_or_create(
+                name=skill_name.strip(), defaults={"description": ""}
+            )
+            skills.append(skill)
+
+        # Xóa skills hiện tại và thêm skills mới
+        job.skills.clear()
+        if skills:
+            job.skills.add(*skills)
 
 
 class JobApplicationSerializer(serializers.ModelSerializer):
@@ -309,19 +421,7 @@ class JobApplicationSerializer(serializers.ModelSerializer):
 
 
 class SavedJobSerializer(serializers.ModelSerializer):
-    job = JobSerializer(
-        read_only=True,
-        fields=[
-            "id",
-            "title",
-            "company",
-            "status",
-            "min_salary",
-            "max_salary",
-            "currency",
-        ],
-        company_fields=["id", "name", "logo"],
-    )
+    job = JobSerializer(read_only=True)
 
     class Meta:
         model = SavedJob
@@ -356,3 +456,63 @@ class SavedJobSerializer(serializers.ModelSerializer):
         validated_data["job"] = job
 
         return super().create(validated_data)
+
+
+class InterviewScheduleSerializer(serializers.ModelSerializer):
+    application = JobApplicationSerializer(read_only=True)
+
+    class Meta:
+        model = InterviewSchedule
+        fields = ["id", "application", "scheduled_time", "meeting_link", "note"]
+        read_only_fields = ["id", "application"]
+
+
+class CVReviewSerializer(serializers.ModelSerializer):
+    application = JobApplicationSerializer(read_only=True)
+
+    class Meta:
+        model = CVReview
+        fields = ["id", "application", "match_score", "summary", "reviewed_at"]
+        read_only_fields = ["id", "application", "reviewed_at"]
+
+
+class JobStatisticsSerializer(serializers.ModelSerializer):
+    job_title = serializers.SerializerMethodField()
+
+    class Meta:
+        model = JobStatistics
+        fields = [
+            "id",
+            "job",
+            "job_title",
+            "view_count",
+            "application_count",
+            "accepted_count",
+            "rejected_count",
+            "average_processing_time",
+        ]
+        read_only_fields = ["id", "job", "job_title"]
+
+    def get_job_title(self, obj):
+        return obj.job.title if obj.job else None
+
+
+class CompanyStatisticsSerializer(serializers.ModelSerializer):
+    company_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CompanyStatistics
+        fields = [
+            "id",
+            "company",
+            "company_name",
+            "total_jobs",
+            "active_jobs",
+            "total_applications",
+            "hired_applicants",
+            "average_hire_rate",
+        ]
+        read_only_fields = ["id", "company", "company_name"]
+
+    def get_company_name(self, obj):
+        return obj.company.name if obj.company else None

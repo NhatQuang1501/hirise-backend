@@ -2,12 +2,11 @@ from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django.db.models import Q
 from django.db import transaction
-from users.models import User, ApplicantProfile, RecruiterProfile, SocialLink
+from users.models import User, ApplicantProfile, CompanyProfile, SocialLink
 from users.choices import Role
 from users.utils import get_otp_from_cache
 
 
-# Versatile User Serializer with flexible fields
 class UserSerializer(serializers.ModelSerializer):
     profile = serializers.SerializerMethodField()
 
@@ -24,47 +23,95 @@ class UserSerializer(serializers.ModelSerializer):
             "updated_at",
             "profile",
         ]
-        read_only_fields = ["id", "role", "is_verified", "is_locked"]
-
-    def __init__(self, *args, **kwargs):
-        # Remove profile field if not needed
-        exclude_profile = kwargs.pop("exclude_profile", False)
-        super().__init__(*args, **kwargs)
-        if exclude_profile:
-            self.fields.pop("profile")
-
-    # def get_profile(self, obj):
-    #     if obj.role == Role.ADMIN:
-    #         return None
-
-    #     if obj.role == Role.APPLICANT:
-    #         profile = ApplicantProfile.objects.filter(user=obj).first()
-    #         if profile:
-    #             return ApplicantProfileSerializer(profile).data
-
-    #     if obj.role == Role.RECRUITER:
-    #         profile = RecruiterProfile.objects.filter(user=obj).first()
-    #         if profile:
-    #             return RecruiterProfileSerializer(profile).data
-
-    #     return None
+        read_only_fields = [
+            "id",
+            "role",
+            "is_verified",
+            "is_locked",
+            "created_at",
+            "updated_at",
+        ]
 
     def get_profile(self, obj):
-        if not self.context.get("exclude_profile", False):
-            if obj.role == Role.APPLICANT:
-                try:
-                    profile = obj.applicant_profile
-                    return ApplicantProfileSerializer(profile).data
-                except ApplicantProfile.DoesNotExist:
-                    return None
+        if obj.role == Role.APPLICANT:
+            try:
+                profile = obj.applicant_profile
+                return (
+                    {
+                        "full_name": profile.full_name,
+                        "date_of_birth": profile.date_of_birth,
+                        "gender": profile.gender,
+                        "phone_number": profile.phone_number,
+                        "cv": profile.cv.url if profile.cv else None,
+                        "description": profile.description,
+                    }
+                    if profile
+                    else None
+                )
+            except ApplicantProfile.DoesNotExist:
+                return None
 
-            elif obj.role == Role.RECRUITER:
-                try:
-                    profile = obj.recruiter_profile
-                    return RecruiterProfileSerializer(profile).data
-                except RecruiterProfile.DoesNotExist:
-                    return None
+        elif obj.role == Role.COMPANY:
+            try:
+                profile = obj.company_profile
+                return (
+                    {
+                        "name": profile.name,
+                        "website": profile.website,
+                        "logo": profile.logo.url if profile.logo else None,
+                        "description": profile.description,
+                        "benefits": profile.benefits,
+                        "founded_year": profile.founded_year,
+                        "locations": [loc.id for loc in profile.locations.all()],
+                        "industries": [ind.id for ind in profile.industries.all()],
+                        "skills": [skill.id for skill in profile.skills.all()],
+                        "location_names": [
+                            loc.address for loc in profile.locations.all()
+                        ],
+                        "industry_names": [
+                            ind.name for ind in profile.industries.all()
+                        ],
+                        "skill_names": [skill.name for skill in profile.skills.all()],
+                    }
+                    if profile
+                    else None
+                )
+            except CompanyProfile.DoesNotExist:
+                return None
         return None
+
+    # def __init__(self, *args, **kwargs):
+    #     # Remove profile field if not needed
+    #     exclude_profile = kwargs.pop("exclude_profile", False)
+    #     super().__init__(*args, **kwargs)
+    #     if exclude_profile:
+    #         self.fields.pop("profile")
+
+
+class UserWithProfileSerializer(UserSerializer):
+    profile = serializers.SerializerMethodField()
+
+    class Meta(UserSerializer.Meta):
+        fields = UserSerializer.Meta.fields + ["profile"]
+
+    def get_profile(self, obj):
+        try:
+            if obj.role == Role.APPLICANT:
+                profile = getattr(obj, "applicant_profile", None)
+                if profile:
+                    return ApplicantProfileSerializer(
+                        profile, context={"exclude_user": True}
+                    ).data
+            elif obj.role == Role.COMPANY:
+                profile = getattr(obj, "company_profile", None)
+                if profile:
+                    return CompanyProfileSerializer(
+                        profile, context={"exclude_user": True}
+                    ).data
+            return None
+        except Exception as e:
+            print(f"Profile serialization error: {str(e)}")  # Thêm log để debug
+            return None
 
 
 # Profile serializers
@@ -76,32 +123,21 @@ class SocialLinkSerializer(serializers.ModelSerializer):
 
 
 class ApplicantProfileSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
-    social_links = SocialLinkSerializer(many=True, required=False)
-
     class Meta:
         model = ApplicantProfile
         fields = [
-            "user",
             "full_name",
+            "date_of_birth",
             "gender",
             "phone_number",
             "cv",
             "description",
-            "social_links",
         ]
 
-    def __init__(self, *args, **kwargs):
-        # Customize user field
-        user_fields = kwargs.pop("user_fields", None)
-        super().__init__(*args, **kwargs)
-
-        if user_fields is not None and "user" in self.fields:
-            self.fields["user"] = UserSerializer(read_only=True, fields=user_fields)
-
-    @staticmethod
-    def setup_eager_loading(queryset):
-        return queryset.select_related("user").prefetch_related("social_links")
+    def get_user(self, obj):
+        if self.context.get("exclude_user", False):
+            return None
+        return UserSerializer(obj.user, context={"exclude_profile": True}).data
 
     def update(self, instance, validated_data):
         social_links_data = validated_data.pop("social_links", None)
@@ -120,55 +156,90 @@ class ApplicantProfileSerializer(serializers.ModelSerializer):
         return instance
 
 
-class RecruiterProfileSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
-    company_name = serializers.SerializerMethodField()
-    company_id = serializers.UUIDField(write_only=True, required=False)
+class CompanyProfileSerializer(serializers.ModelSerializer):
+    location_names = serializers.SerializerMethodField()
+    industry_names = serializers.SerializerMethodField()
+    skill_names = serializers.SerializerMethodField()
+    logo = serializers.ImageField(required=False, allow_null=True)
+    id = serializers.SerializerMethodField()
 
     class Meta:
-        model = RecruiterProfile
+        model = CompanyProfile
         fields = [
-            "user",
-            "full_name",
-            "phone_number",
-            "company",
-            "company_name",
-            "company_id",
+            "id",
+            "name",
+            "website",
+            "logo",
+            "description",
+            "benefits",
+            "founded_year",
+            "locations",
+            "industries",
+            "skills",
+            "location_names",
+            "industry_names",
+            "skill_names",
         ]
-        read_only_fields = ["company", "company_name"]
 
-    def __init__(self, *args, **kwargs):
-        # Customize user field
-        user_fields = kwargs.pop("user_fields", None)
-        super().__init__(*args, **kwargs)
+    def get_id(self, obj):
+        # Trả về id của user làm id của company
+        return obj.user.id if obj.user else None
 
-        if user_fields is not None and "user" in self.fields:
-            self.fields["user"] = UserSerializer(read_only=True, fields=user_fields)
+    def get_user(self, obj):
+        # Chỉ trả về user info khi context yêu cầu
+        if not self.context.get("exclude_user", True):  # Mặc định sẽ exclude
+            return UserSerializer(obj.user, context={"exclude_profile": True}).data
+        return None
 
-    def get_company_name(self, obj):
-        return obj.company.name if obj.company else None
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Kiểm tra xem key "user" có tồn tại không trước khi truy cập
+        if "user" in data and data["user"] is None:
+            data.pop("user", None)
+        return data
+
+    def get_location_names(self, obj):
+        return [loc.address for loc in obj.locations.all()]
+
+    def get_industry_names(self, obj):
+        return [industry.name for industry in obj.industries.all()]
+
+    def get_skill_names(self, obj):
+        return [skill.name for skill in obj.skills.all()]
 
     @staticmethod
     def setup_eager_loading(queryset):
-        return queryset.select_related("user", "company")
-
-    def validate_company_id(self, value):
-        from jobs.models import Company
-
-        if value and not Company.objects.filter(id=value).exists():
-            raise serializers.ValidationError("Company does not exist")
-        return value
+        return queryset.select_related("user").prefetch_related(
+            "social_links", "locations", "industries", "skills"
+        )
 
     def update(self, instance, validated_data):
-        company_id = validated_data.pop("company_id", None)
+        social_links_data = validated_data.pop("social_links", None)
+        locations_data = validated_data.pop("locations", None)
+        industries_data = validated_data.pop("industries", None)
+        skills_data = validated_data.pop("skills", None)
 
-        if company_id:
-            instance.company_id = company_id
-
+        # Update CompanyProfile fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-
         instance.save()
+
+        # Update social links if provided
+        if social_links_data is not None:
+            instance.social_links.all().delete()
+            for link_data in social_links_data:
+                SocialLink.objects.create(user=instance.user, **link_data)
+
+        # Update related entities if provided
+        if locations_data is not None:
+            instance.locations.set(locations_data)
+
+        if industries_data is not None:
+            instance.industries.set(industries_data)
+
+        if skills_data is not None:
+            instance.skills.set(skills_data)
+
         return instance
 
 
@@ -203,22 +274,21 @@ class RegisterSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-
         with transaction.atomic():
             user = User.objects.create_user(
                 username=validated_data["username"],
                 email=validated_data["email"],
                 password=validated_data["password"],
                 role=validated_data["role"],
-                is_verified=False,
             )
 
+            # Tự động tạo profile tương ứng
             if user.role == Role.APPLICANT:
                 ApplicantProfile.objects.create(user=user)
-            elif user.role == Role.RECRUITER:
-                RecruiterProfile.objects.create(user=user)
+            elif user.role == Role.COMPANY:
+                CompanyProfile.objects.create(user=user)
 
-        return user
+            return user
 
 
 class OTPVerifySerializer(serializers.Serializer):
@@ -262,20 +332,47 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(required=True, write_only=True)
 
     def validate(self, data):
-        user = authenticate(username=data["username"], password=data["password"])
+        username = data.get("username")
+        password = data.get("password")
 
-        if not user:
-            raise serializers.ValidationError("Username or password is incorrect")
+        if username and password:
+            # Thử authenticate với username
+            user = authenticate(username=username, password=password)
 
-        # Validate additional conditions
-        errors = []
-        if not user.is_verified:
-            errors.append("Your account has not been verified")
-        if user.is_locked:
-            errors.append("Your account has been locked")
+            # Nếu không thành công và username có dạng email
+            if not user and "@" in username:
+                try:
+                    user_obj = User.objects.get(email=username)
+                    user = authenticate(username=user_obj.username, password=password)
+                except User.DoesNotExist:
+                    pass
 
-        if errors:
-            raise serializers.ValidationError(", ".join(errors))
+            if not user:
+                raise serializers.ValidationError(
+                    {
+                        "non_field_errors": [
+                            "Unable to log in with provided credentials."
+                        ]
+                    }
+                )
 
-        data["user"] = user
-        return data
+            if not user.is_verified:
+                raise serializers.ValidationError(
+                    {
+                        "non_field_errors": [
+                            "Account is not verified. Please verify your account."
+                        ]
+                    }
+                )
+
+            if user.is_locked:
+                raise serializers.ValidationError(
+                    {"non_field_errors": ["Account is locked."]}
+                )
+
+            data["user"] = user
+            return data
+
+        raise serializers.ValidationError(
+            {"non_field_errors": ["Must include 'username' and 'password'."]}
+        )
