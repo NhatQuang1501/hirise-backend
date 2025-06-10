@@ -10,16 +10,12 @@ from django.db import transaction
 
 from jobs.models import (
     Job,
-    JobApplication,
     SavedJob,
     JobStatistics,
     CompanyStatistics,
-    InterviewSchedule,
-    CVReview,
 )
 from jobs.serializers import (
     JobSerializer,
-    JobApplicationSerializer,
     SavedJobSerializer,
     JobStatisticsSerializer,
     CompanyStatisticsSerializer,

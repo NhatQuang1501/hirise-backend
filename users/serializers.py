@@ -219,6 +219,11 @@ class CompanyProfileSerializer(serializers.ModelSerializer):
         industries_data = validated_data.pop("industries", None)
         skills_data = validated_data.pop("skills", None)
 
+        # Xử lý logo riêng để đảm bảo nó được lưu đúng cách
+        logo = validated_data.pop("logo", None)
+        if logo is not None:
+            instance.logo = logo
+
         # Update CompanyProfile fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)

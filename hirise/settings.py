@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "django_filters",
     "users",
     "jobs",
+    "application",
     # "notification",
 ]
 
@@ -230,6 +231,35 @@ SWAGGER_SETTINGS = {
     "REFETCH_SCHEMA_ON_LOGOUT": True,
 }
 
-# Thêm vào settings.py
 USE_I18N = False  # Tắt internationalization nếu không cần thiết
 USE_L10N = False  # Tắt localization nếu không cần thiết
+
+
+# STORAGE Setup
+STORAGES = {
+    "default": {
+        # "BACKEND": "storages.backends.s3.S3Storage",
+        "BACKEND": "digital_ocean_space.storage.CustomMediaS3Storage",
+        "OPTIONS": {
+            "access_key": os.getenv("AWS_ACCESS_KEY_ID"),
+            "secret_key": os.getenv("AWS_SECRET_ACCESS_KEY"),
+            "bucket_name": os.getenv("AWS_STORAGE_BUCKET_NAME"),
+            "endpoint_url": os.getenv("AWS_ENDPOINT_URL"),
+            "location": "media",
+            # "default_acl": "private",
+            "custom_domain": os.getenv("AWS_CUSTOM_DOMAIN"),
+        },
+    },
+    "staticfiles": {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+            "access_key": os.getenv("AWS_ACCESS_KEY_ID"),
+            "secret_key": os.getenv("AWS_SECRET_ACCESS_KEY"),
+            "bucket_name": os.getenv("AWS_STORAGE_BUCKET_NAME"),
+            "endpoint_url": os.getenv("AWS_ENDPOINT_URL"),
+            "location": "static",
+            "default_acl": "public-read",
+            "custom_domain": os.getenv("AWS_CUSTOM_DOMAIN"),
+        },
+    },
+}

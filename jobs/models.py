@@ -3,7 +3,6 @@ from django.contrib.auth.models import Group, Permission
 import uuid
 from users.choices import *
 from django.core.exceptions import ValidationError
-from django.conf import settings
 
 
 class Location(models.Model):
@@ -148,66 +147,6 @@ class SavedJob(models.Model):
     @property
     def savedJob_id(self):
         return self.id
-
-
-class JobApplication(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    job = models.ForeignKey(
-        Job,
-        on_delete=models.CASCADE,
-        related_name="applications",
-    )
-    # Sử dụng string để tránh circular import
-    applicant = models.ForeignKey(
-        "users.ApplicantProfile",
-        on_delete=models.CASCADE,
-        related_name="applications",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    status = models.CharField(
-        max_length=20,
-        choices=ApplicationStatus.choices,
-        default=ApplicationStatus.PENDING,
-    )
-    note = models.TextField(blank=True)
-
-    class Meta:
-        unique_together = ("applicant", "job")
-
-    def __str__(self):
-        return f"{self.applicant.user.username if hasattr(self.applicant, 'user') else 'Unknown'} - {self.job.title}"
-
-    @property
-    def jobApplication_id(self):
-        return self.id
-
-
-class InterviewSchedule(models.Model):
-    application = models.OneToOneField(
-        JobApplication,
-        on_delete=models.CASCADE,
-        related_name="interview",
-    )
-    scheduled_time = models.DateTimeField(blank=True, null=True)
-    meeting_link = models.URLField(blank=True, null=True)
-    note = models.TextField(blank=True)
-
-    def __str__(self):
-        return f"Interview for {self.application}"
-
-
-class CVReview(models.Model):
-    application = models.OneToOneField(
-        JobApplication,
-        on_delete=models.CASCADE,
-        related_name="cv_review",
-    )
-    match_score = models.FloatField()
-    summary = models.TextField(blank=True)
-    reviewed_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"Review for {self.application}"
 
 
 class JobStatistics(models.Model):

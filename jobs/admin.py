@@ -44,34 +44,6 @@ class SavedJobAdmin(admin.ModelAdmin):
     search_fields = ("applicant__user__username", "job__title")
 
 
-class JobApplicationAdmin(admin.ModelAdmin):
-    list_editable = ["status"]
-    list_display = ("applicant", "job", "status", "created_at")
-    list_filter = ("status", "created_at")
-    search_fields = ("applicant__user__username", "job__title", "note")
-    date_hierarchy = "created_at"
-
-
-class InterviewScheduleAdmin(admin.ModelAdmin):
-    list_display = ("application", "scheduled_time")
-    list_filter = ("scheduled_time",)
-    search_fields = (
-        "application__job__title",
-        "application__applicant__user__username",
-        "note",
-    )
-
-
-class CVReviewAdmin(admin.ModelAdmin):
-    list_display = ("application", "match_score", "reviewed_at")
-    list_filter = ("reviewed_at", "match_score")
-    search_fields = (
-        "application__job__title",
-        "application__applicant__user__username",
-        "summary",
-    )
-
-
 class JobStatisticsAdmin(admin.ModelAdmin):
     list_display = (
         "job",
@@ -100,8 +72,5 @@ admin.site.register(Location, LocationAdmin)
 admin.site.register(Industry, IndustryAdmin)
 admin.site.register(SkillTag, SkillTagAdmin)
 admin.site.register(SavedJob, SavedJobAdmin)
-admin.site.register(JobApplication, JobApplicationAdmin)
-admin.site.register(InterviewSchedule, InterviewScheduleAdmin)
-admin.site.register(CVReview, CVReviewAdmin)
 admin.site.register(JobStatistics, JobStatisticsAdmin)
 admin.site.register(CompanyStatistics, CompanyStatisticsAdmin)

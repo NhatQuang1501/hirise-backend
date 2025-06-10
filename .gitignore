@@ -4,4 +4,6 @@ __pycache__/
 .env
 differences.py
 COMPANY_PREPROCESSED_DATA_clean.csv
+CV_Nguyen Nhat Quang.pdf
+CV_Nguyen Nhat Quang.docx
 import_companies.py

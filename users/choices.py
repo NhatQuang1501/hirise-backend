@@ -55,8 +55,9 @@ class UserStatus(BaseChoices):
 
 class ApplicationStatus(BaseChoices):
     PENDING = "pending", "Pending Review"
-    REVIEWING = "reviewing", "Under Review"
-    ACCEPTED = "accepted", "Offer Accepted"
+    REVIEWING = "reviewing", "Reviewing"
+    PROCESSING = "processing", "Processing"
+    ACCEPTED = "accepted", "Accepted"
     REJECTED = "rejected", "Rejected"
 
 

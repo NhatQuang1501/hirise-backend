@@ -5,12 +5,9 @@ from jobs.models import (
     Location,
     Industry,
     SkillTag,
-    JobApplication,
     SavedJob,
     JobStatistics,
     CompanyStatistics,
-    InterviewSchedule,
-    CVReview,
 )
 from users.choices import (
     JobStatus,
@@ -60,7 +57,6 @@ class JobSerializer(serializers.ModelSerializer):
     company = CompanyProfileSerializer(read_only=True)
     company_name = serializers.SerializerMethodField()
     status_display = serializers.SerializerMethodField()
-    application_count = serializers.SerializerMethodField()
     is_saved = serializers.SerializerMethodField()
     saved_count = serializers.SerializerMethodField()
     locations = LocationSerializer(many=True, read_only=True)
@@ -109,7 +105,6 @@ class JobSerializer(serializers.ModelSerializer):
             "skill_names",
             "created_at",
             "updated_at",
-            "application_count",
             "is_saved",
             "saved_count",
         ]
@@ -122,7 +117,6 @@ class JobSerializer(serializers.ModelSerializer):
             "status_display",
             "city_display",
             "salary_display",
-            "application_count",
             "is_saved",
             "saved_count",
         ]
@@ -151,9 +145,6 @@ class JobSerializer(serializers.ModelSerializer):
 
     def get_city_display(self, obj):
         return obj.get_city_display() if obj.city else None
-
-    def get_application_count(self, obj):
-        return obj.applications.count()
 
     def get_is_saved(self, obj):
         request = self.context.get("request")
@@ -373,53 +364,6 @@ class JobSerializer(serializers.ModelSerializer):
             job.skills.add(*skills)
 
 
-class JobApplicationSerializer(serializers.ModelSerializer):
-    applicant = ApplicantProfileSerializer(read_only=True)
-    job = JobSerializer(read_only=True, fields=["id", "title", "company", "status"])
-    status_display = serializers.SerializerMethodField()
-
-    class Meta:
-        model = JobApplication
-        fields = [
-            "id",
-            "applicant",
-            "job",
-            "created_at",
-            "status",
-            "status_display",
-            "note",
-        ]
-        read_only_fields = ["id", "applicant", "job", "created_at", "status_display"]
-
-    def get_status_display(self, obj):
-        return obj.get_status_display()
-
-    def validate(self, data):
-        # Kiểm tra người dùng có phải là applicant không
-        request = self.context.get("request")
-        if request.user.role != Role.APPLICANT:
-            raise serializers.ValidationError("Only applicants can apply for jobs")
-
-        # Kiểm tra job có ở trạng thái published không
-        job = self.context.get("job")
-        if job.status != JobStatus.PUBLISHED:
-            raise serializers.ValidationError(
-                "Cannot apply for a job that is not in published status"
-            )
-
-        return data
-
-    def create(self, validated_data):
-        request = self.context.get("request")
-        job = self.context.get("job")
-
-        # Tạo job application với applicant và job
-        validated_data["applicant"] = request.user.applicant_profile
-        validated_data["job"] = job
-
-        return super().create(validated_data)
-
-
 class SavedJobSerializer(serializers.ModelSerializer):
     job = JobSerializer(read_only=True)
 
@@ -458,24 +402,6 @@ class SavedJobSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
-class InterviewScheduleSerializer(serializers.ModelSerializer):
-    application = JobApplicationSerializer(read_only=True)
-
-    class Meta:
-        model = InterviewSchedule
-        fields = ["id", "application", "scheduled_time", "meeting_link", "note"]
-        read_only_fields = ["id", "application"]
-
-
-class CVReviewSerializer(serializers.ModelSerializer):
-    application = JobApplicationSerializer(read_only=True)
-
-    class Meta:
-        model = CVReview
-        fields = ["id", "application", "match_score", "summary", "reviewed_at"]
-        read_only_fields = ["id", "application", "reviewed_at"]
-
-
 class JobStatisticsSerializer(serializers.ModelSerializer):
     job_title = serializers.SerializerMethodField()
 
@@ -486,7 +412,6 @@ class JobStatisticsSerializer(serializers.ModelSerializer):
             "job",
             "job_title",
             "view_count",
-            "application_count",
             "accepted_count",
             "rejected_count",
             "average_processing_time",
