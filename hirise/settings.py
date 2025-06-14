@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "users",
     "jobs",
     "application",
+    "AI",
     # "notification",
 ]
 

@@ -54,16 +54,15 @@ class UserStatus(BaseChoices):
 
 
 class ApplicationStatus(BaseChoices):
-    PENDING = "pending", "Pending Review"
+    PENDING = "pending", "Pending review"
     REVIEWING = "reviewing", "Reviewing"
-    PROCESSING = "processing", "Processing"
     ACCEPTED = "accepted", "Accepted"
     REJECTED = "rejected", "Rejected"
 
 
 class JobType(BaseChoices):
-    FULL_TIME = "full time", "Full Time"
-    PART_TIME = "part time", "Part Time"
+    FULL_TIME = "full time", "Full time"
+    PART_TIME = "part time", "Part time"
     CONTRACT = "contract", "Contract"
     FREELANCE = "freelance", "Freelance"
 

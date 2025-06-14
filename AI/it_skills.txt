@@ -1,0 +1,252 @@
+Python
+Java
+JavaScript
+TypeScript
+C
+C++
+C#
+Go
+Rust
+Ruby
+PHP
+Swift
+Kotlin
+Dart
+R
+MATLAB
+Julia
+Haskell
+Scala
+Perl
+Lua
+Shell
+Bash
+PowerShell
+Objective-C
+Groovy
+HTML
+CSS
+SCSS
+SASS
+LESS
+Tailwind CSS
+Bootstrap
+Material UI
+Chakra UI
+jQuery
+React.js
+Angular
+Vue.js
+Next.js
+Nuxt.js
+Gatsby
+Ember.js
+Svelte
+Three.js
+D3.js
+Redux
+Recoil
+Node.js
+Express.js
+NestJS
+Django
+Flask
+FastAPI
+Spring Boot
+Spring MVC
+Laravel
+Symfony
+Ruby on Rails
+ASP.NET
+Phoenix
+Fiber
+Gin
+Ktor
+Hapi.js
+Actix
+Vapor
+MySQL
+PostgreSQL
+SQLite
+SQL Server
+Oracle
+MongoDB
+Redis
+Cassandra
+DynamoDB
+Firebase Realtime DB
+Firestore
+InfluxDB
+Neo4j
+CouchDB
+MariaDB
+FaunaDB
+Supabase
+Elasticsearch
+Realm
+TimescaleDB
+AWS
+Azure
+Google Cloud Platform
+GCP
+DigitalOcean
+Heroku
+Vercel
+Netlify
+Docker
+Kubernetes
+Terraform
+Ansible
+Chef
+Puppet
+Serverless Framework
+GitHub Actions
+GitLab CI/CD
+Jenkins
+CircleCI
+Travis CI
+ArgoCD
+Helm
+Istio
+Linux
+Unix
+SSH
+Nginx
+Apache
+Load Balancing
+Firewall
+VPN
+Security Audit
+Penetration Testing
+OAuth2
+JWT
+OpenID Connect
+Android
+iOS
+React Native
+Flutter
+Xamarin
+Ionic
+SwiftUI
+Jetpack Compose
+Cordova
+Unity
+ARKit
+ARCore
+Machine Learning
+Deep Learning
+Artificial Intelligence
+Computer Vision
+Natural Language Processing
+NLP
+Speech Recognition
+Recommendation Systems
+TensorFlow
+PyTorch
+Keras
+Scikit-learn
+Hugging Face
+OpenCV
+Transformers
+Fastai
+Gensim
+XGBoost
+LightGBM
+CatBoost
+Pandas
+NumPy
+SciPy
+Seaborn
+Matplotlib
+Plotly
+Altair
+Dask
+Polars
+Statsmodels
+Data Visualization
+Statistical Analysis
+BigQuery
+Selenium
+Pytest
+JUnit
+TestNG
+Mocha
+Chai
+Jest
+Jasmine
+Enzyme
+Cypress
+Playwright
+RSpec
+Cucumber
+Puppeteer
+Robot Framework
+Postman
+Git
+GitHub
+GitLab
+Bitbucket
+SVN
+Mercurial
+GitKraken
+SourceTree
+Scrum
+Kanban
+Agile
+Waterfall
+Jira
+Trello
+Asana
+ClickUp
+Monday.com
+Confluence
+Notion
+Communication
+Teamwork
+Problem Solving
+Critical Thinking
+Time Management
+Leadership
+Adaptability
+Conflict Resolution
+Creativity
+Attention to Detail
+Project Management
+Self-motivation
+Presentation Skills
+Cross-functional Collaboration
+Wireshark
+OWASP
+Burp Suite
+Penetration Testing
+Security Testing
+Networking
+TOEIC
+IELTS
+Raspberry Pi
+Arduino
+CTF
+Capture The Flag
+Attack & Defense
+Forensics
+Security Analysis
+Vulnerability Assessment
+Ethical Hacking
+Cryptography
+Network Security
+Web Security
+Cyber Security
+Information Security
+IDS/IPS
+SIEM
+Nmap
+Metasploit
+Kali Linux
+Reverse Engineering
+Malware Analysis
+Security Auditing
+Risk Assessment
+Compliance
+GDPR
+HIPAA
+PCI DSS

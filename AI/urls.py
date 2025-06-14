@@ -1,0 +1,61 @@
+from django.urls import path
+from .views import (
+    JobProcessedDataListView,
+    JobProcessedDataDetailView,
+    JobProcessedDataByJobView,
+    CVProcessedDataListView,
+    CVProcessedDataDetailView,
+    CVProcessedDataByApplicationView,
+    MatchJobWithCVView,
+    MatchJobWithAllCVsView,
+    GetJobMatchResultsView,
+)
+
+urlpatterns = [
+    path(
+        "job-processed-data/",
+        JobProcessedDataListView.as_view(),
+        name="job-processed-data-list",
+    ),
+    path(
+        "job-processed-data/<uuid:pk>/",
+        JobProcessedDataDetailView.as_view(),
+        name="job-processed-data-detail",
+    ),
+    path(
+        "job-processed-data/job/<uuid:job_id>/",
+        JobProcessedDataByJobView.as_view(),
+        name="job-processed-data-by-job",
+    ),
+    path(
+        "cv-processed-data/",
+        CVProcessedDataListView.as_view(),
+        name="cv-processed-data-list",
+    ),
+    path(
+        "cv-processed-data/<uuid:pk>/",
+        CVProcessedDataDetailView.as_view(),
+        name="cv-processed-data-detail",
+    ),
+    path(
+        "cv-processed-data/application/<uuid:application_id>/",
+        CVProcessedDataByApplicationView.as_view(),
+        name="cv-processed-data-by-application",
+    ),
+    # Match Job with CV
+    path(
+        "match/job/<uuid:job_id>/application/<uuid:application_id>/",
+        MatchJobWithCVView.as_view(),
+        name="match-job-cv",
+    ),
+    path(
+        "match/job/<uuid:job_id>/all-applications/",
+        MatchJobWithAllCVsView.as_view(),
+        name="match-job-all-cvs",
+    ),
+    path(
+        "match/job/<uuid:job_id>/results/",
+        GetJobMatchResultsView.as_view(),
+        name="job-match-results",
+    ),
+]

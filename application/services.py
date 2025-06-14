@@ -1,78 +1,77 @@
 import os
 from django.conf import settings
-import json
+import logging
+
+# Imports từ AI module
+try:
+    from AI.cv_processing import process_cv_on_application
+    from AI.matching_service import MatchingService
+except ImportError:
+    # Nếu module chưa được tạo, tạo hàm giả
+    def process_cv_on_application(application):
+        logging.warning("AI.cv_processing module not found. CV processing skipped.")
+        return None
+
+    class MatchingService:
+        def match_job_cv(self, job_id, application_id=None, cv_id=None):
+            logging.warning("AI.matching_service module not found. Matching skipped.")
+            return None
 
 
-def extract_cv_content(cv_file):
+logger = logging.getLogger(__name__)
+
+
+def process_job_application(application):
     """
-    Trích xuất nội dung từ file CV
-
-    Phương pháp:
-    1. Xác định loại file (pdf hoặc docx)
-    2. Sử dụng thư viện phù hợp để trích xuất nội dung
-    3. Trả về nội dung dưới dạng JSON
-
-    Tham số:
-    - cv_file: FileField object chứa CV
-
-    Trả về:
-    - Dictionary chứa nội dung đã trích xuất
+    Xử lý đơn ứng tuyển mới
+    1. Xử lý CV để trích xuất thông tin
+    2. Đánh giá sự phù hợp với công việc
     """
-    file_path = cv_file.path
-    file_name = os.path.basename(file_path).lower()
+    try:
+        # Xử lý CV để trích xuất thông tin
+        cv_data = process_cv_on_application(application)
 
-    # Cấu trúc kết quả
-    result = {
-        "raw_text": "",
-        "sections": {},
-        "extracted_skills": [],
-        "extracted_education": [],
-        "extracted_experience": [],
-    }
+        # Nếu xử lý CV thành công, đánh giá sự phù hợp với công việc
+        if cv_data:
+            try:
+                # Đánh giá sự phù hợp với công việc
+                matching_service = MatchingService()
+                match_result = matching_service.match_job_cv(
+                    job_id=application.job.id, application_id=application.id
+                )
 
-    if file_name.endswith(".pdf"):
-        # TODO: Sử dụng pdfplumber hoặc PyPDF2 để đọc nội dung PDF
-        # Ví dụ:
-        # import pdfplumber
-        # with pdfplumber.open(file_path) as pdf:
-        #     for page in pdf.pages:
-        #         result['raw_text'] += page.extract_text() or ''
-        pass
+                if match_result:
+                    logger.info(
+                        f"Evaluated match for application {application.id}: {match_result.match_score:.2f}%"
+                    )
+                else:
+                    logger.warning(
+                        f"Cannot evaluate match for application {application.id}"
+                    )
+            except Exception as e:
+                logger.error(f"Error evaluating match: {e}")
+        else:
+            logger.warning(f"Cannot process CV for application {application.id}")
+    except Exception as e:
+        logger.error(f"Error processing application {application.id}: {e}")
 
-    elif file_name.endswith(".docx"):
-        # TODO: Sử dụng python-docx để đọc nội dung DOCX
-        # Ví dụ:
-        # import docx
-        # doc = docx.Document(file_path)
-        # for para in doc.paragraphs:
-        #     result['raw_text'] += para.text + '\n'
-        pass
-
-    # TODO: Phân tích nội dung thành các phần (sections)
-    # TODO: Trích xuất kỹ năng, học vấn, kinh nghiệm
-
-    return result
+    return application
 
 
-def analyze_cv_job_match(cv_content, job):
+def evaluate_applications_for_job(job_id):
     """
-    Phân tích mức độ phù hợp giữa CV và công việc
-
-    Phương pháp:
-    1. So sánh kỹ năng trong CV với yêu cầu công việc
-    2. So sánh kinh nghiệm với yêu cầu công việc
-    3. Tính điểm phù hợp tổng thể
-
-    Tham số:
-    - cv_content: Dictionary chứa nội dung CV đã trích xuất
-    - job: Job object chứa thông tin công việc
-
-    Trả về:
-    - Điểm phù hợp (0-100)
+    Đánh giá lại tất cả đơn ứng tuyển cho một công việc
     """
-    # TODO: Phân tích yêu cầu công việc
-    # TODO: So sánh CV với yêu cầu
-    # TODO: Tính điểm phù hợp
+    try:
+        matching_service = MatchingService()
+        results = matching_service.match_job_with_all_applications(job_id)
 
-    # Trả về điểm phù hợp giả định (sẽ được thay thế bằng logic thực tế)
-    return 75.0
+        if results:
+            logger.info(f"Evaluated {len(results)} applications for job {job_id}")
+            return results
+        else:
+            logger.warning(f"No applications found for job {job_id}")
+            return []
+    except Exception as e:
+        logger.error(f"Error evaluating applications for job {job_id}: {e}")
+        return []

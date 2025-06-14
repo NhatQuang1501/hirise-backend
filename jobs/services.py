@@ -4,6 +4,24 @@ from django.core.mail import send_mail
 from django.conf import settings
 from jobs.models import Job, JobApplication
 from users.choices import JobStatus, ApplicationStatus
+import logging
+
+# Import module xử lý job data
+try:
+    from AI.job_processing import process_job_on_publish, process_job_on_update
+except ImportError:
+    # Nếu module chưa được tạo, tạo các hàm giả
+    def process_job_on_publish(job):
+        logging.warning(
+            "AI.job_processing module not found. Job data processing skipped."
+        )
+        return None
+
+    def process_job_on_update(job):
+        logging.warning(
+            "AI.job_processing module not found. Job data processing skipped."
+        )
+        return None
 
 
 class JobService:
@@ -38,8 +56,37 @@ class JobService:
         job.status = JobStatus.PUBLISHED
         job.save(update_fields=["status", "updated_at"])
 
+        # Xử lý job data cho SBERT khi job được publish
+        try:
+            process_job_on_publish(job)
+        except Exception as e:
+            logging.error(f"Error processing job data: {e}")
+
         # Gửi thông báo đến các ứng viên phù hợp (có thể implement sau)
         # NotificationService.notify_matching_applicants(job)
+
+        return job
+
+    @staticmethod
+    @transaction.atomic
+    def update_job(job, data):
+        """
+        Cập nhật thông tin job và xử lý dữ liệu cho SBERT
+        """
+        # Cập nhật các trường từ data
+        for field, value in data.items():
+            if hasattr(job, field):
+                setattr(job, field, value)
+
+        # Lưu job
+        job.save()
+
+        # Nếu job đã được publish, xử lý lại dữ liệu cho SBERT
+        if job.status == JobStatus.PUBLISHED:
+            try:
+                process_job_on_update(job)
+            except Exception as e:
+                logging.error(f"Error processing updated job data: {e}")
 
         return job
 

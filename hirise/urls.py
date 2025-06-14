@@ -37,6 +37,7 @@ urlpatterns = [
     path("api/", include("users.urls")),
     path("api/", include("jobs.urls")),
     path("api/", include("application.urls")),
+    path("api/", include("AI.urls")),
     # path("api/", include("notification.urls", namespace="notification")),
 ]
 

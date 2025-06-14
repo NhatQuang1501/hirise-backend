@@ -56,6 +56,7 @@ class Job(models.Model):
     description = models.TextField(blank=True)
     responsibilities = models.TextField(blank=True)
     requirements = models.TextField(blank=True)
+    preferred_skills = models.TextField(blank=True)
     benefits = models.TextField(blank=True)
 
     status = models.CharField(

@@ -4,6 +4,17 @@ from users.serializers import ApplicantProfileSerializer
 from jobs.serializers import JobSerializer
 from users.choices import ApplicationStatus
 
+# Thêm import này
+try:
+    from AI.cv_processing import process_cv_on_application
+except ImportError:
+    # Nếu module chưa được tạo, tạo hàm giả
+    def process_cv_on_application(application):
+        import logging
+
+        logging.warning("AI.cv_processing module not found. CV processing skipped.")
+        return None
+
 
 class JobApplicationSerializer(serializers.ModelSerializer):
     applicant_profile = serializers.SerializerMethodField()
@@ -89,6 +100,21 @@ class JobApplicationSerializer(serializers.ModelSerializer):
                     {"cv_file": "Only PDF and DOCX files are allowed."}
                 )
         return data
+
+    # Thêm phương thức create để xử lý CV sau khi tạo application
+    def create(self, validated_data):
+        # Tạo application
+        application = super().create(validated_data)
+
+        # Xử lý CV
+        try:
+            process_cv_on_application(application)
+        except Exception as e:
+            import logging
+
+            logging.error(f"Error processing CV for application {application.id}: {e}")
+
+        return application
 
 
 class CVAnalysisSerializer(serializers.ModelSerializer):

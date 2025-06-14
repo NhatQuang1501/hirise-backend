@@ -84,6 +84,7 @@ class JobSerializer(serializers.ModelSerializer):
             "description",
             "responsibilities",
             "requirements",
+            "preferred_skills",
             "benefits",
             "status",
             "status_display",
@@ -264,20 +265,25 @@ class JobSerializer(serializers.ModelSerializer):
             # Create job statistics
             JobStatistics.objects.create(job=job)
 
+            # Xử lý job data nếu job được publish ngay
+            if job.status == JobStatus.PUBLISHED:
+                try:
+                    from AI.job_processing import process_job_on_publish
+
+                    process_job_on_publish(job)
+                except Exception as e:
+                    # Log lỗi nhưng không làm gián đoạn quá trình tạo job
+                    import logging
+
+                    logging.error(f"Error processing job data: {e}")
+
             return job
 
         raise serializers.ValidationError("Only companies can create jobs")
 
     def update(self, instance, validated_data):
-        # Cập nhật closed_date khi chuyển sang CLOSED
-        if (
-            validated_data.get("status") == JobStatus.CLOSED
-            and instance.status != JobStatus.CLOSED
-        ):
-            validated_data["closed_date"] = timezone.now().date()
-
-            # Từ chối các đơn ứng tuyển chưa xử lý
-            self._reject_pending_applications(instance)
+        # Lưu trạng thái trước khi cập nhật
+        old_status = instance.status
 
         # Get location names
         location_names = validated_data.pop("location_names", None)
@@ -286,20 +292,35 @@ class JobSerializer(serializers.ModelSerializer):
         # Get skill names
         skill_names = validated_data.pop("skill_names", None)
 
-        # Update job
-        job = super().update(instance, validated_data)
+        # Update instance
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
 
-        # Update m2m relationships
+        # Process locations
         if location_names is not None:
-            self._process_locations(job, location_names)
+            self._process_locations(instance, location_names)
 
+        # Process industries
         if industry_names is not None:
-            self._process_industries(job, industry_names)
+            self._process_industries(instance, industry_names)
 
+        # Process skills
         if skill_names is not None:
-            self._process_skills(job, skill_names)
+            self._process_skills(instance, skill_names)
 
-        return job
+        # Xử lý job data cho SBERT
+        try:
+            from AI.job_processing import process_job_on_update, process_job_on_publish
+
+            process_job_on_update(instance)
+        except Exception as e:
+            # Log lỗi nhưng không làm gián đoạn quá trình cập nhật job
+            import logging
+
+            logging.error(f"Error processing job data: {e}")
+
+        return instance
 
     def _reject_pending_applications(self, job):
         """Reject all pending applications when job is closed"""

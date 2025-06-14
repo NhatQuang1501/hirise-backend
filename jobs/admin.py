@@ -1,5 +1,6 @@
 from django.contrib import admin
 from jobs.models import *
+from application.services import evaluate_applications_for_job
 
 
 class LocationAdmin(admin.ModelAdmin):
@@ -36,6 +37,23 @@ class JobAdmin(admin.ModelAdmin):
     search_fields = ("title", "description", "company__name")
     date_hierarchy = "created_at"
     filter_horizontal = ("locations", "industries", "skills")
+    actions = ["evaluate_applications"]
+
+    def evaluate_applications(self, request, queryset):
+        total_evaluated = 0
+        for job in queryset:
+            results = evaluate_applications_for_job(job.id)
+            total_evaluated += len(results)
+
+        if total_evaluated > 0:
+            self.message_user(
+                request,
+                f"Evaluated {total_evaluated} applications for {queryset.count()} jobs",
+            )
+        else:
+            self.message_user(request, "No applications to evaluate")
+
+    evaluate_applications.short_description = "Evaluate applications for selected jobs"
 
 
 class SavedJobAdmin(admin.ModelAdmin):

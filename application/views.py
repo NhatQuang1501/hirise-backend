@@ -18,7 +18,8 @@ from users.models import ApplicantProfile
 from users.choices import ApplicationStatus, Role
 from .permissions import IsApplicantOwner, IsCompanyOwner
 from .filters import JobApplicationFilter
-from .services import extract_cv_content, analyze_cv_job_match
+from AI.cv_processing import process_cv_on_application
+from AI.matching_service import MatchingService
 from users.utils import CustomPagination
 
 
@@ -242,17 +243,21 @@ class JobApplicationAnalyzeView(APIView):
         application.save()
 
         try:
-            # Trích xuất nội dung CV
-            extracted_content = extract_cv_content(application.cv_file)
+            # Xử lý CV và lưu dữ liệu
+            processed_data = process_cv_on_application(application)
 
             # Phân tích mức độ phù hợp
-            match_score = analyze_cv_job_match(extracted_content, application.job)
+            matching_service = MatchingService()
+            match_result = matching_service.match_job_cv(
+                application.job.id, application_id=application.id
+            )
+            match_score = match_result.match_score if match_result else 0
 
             # Lưu kết quả phân tích
             cv_analysis, created = CVAnalysis.objects.update_or_create(
                 application=application,
                 defaults={
-                    "extracted_content": extracted_content,
+                    "extracted_content": processed_data.combined_text,
                     "match_score": match_score,
                 },
             )
