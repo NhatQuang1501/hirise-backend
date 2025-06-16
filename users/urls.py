@@ -9,6 +9,10 @@ from users.views.authentication_views import (
     OTPVerifyView,
     HomeView,
 )
+from users.views.user_views import (
+    CompanyFollowerView,
+    CheckFollowStatusView,
+)
 from rest_framework_simplejwt.views import TokenRefreshView
 
 urlpatterns = [
@@ -17,6 +21,18 @@ urlpatterns = [
     path("applicants/<uuid:pk>/", ApplicantView.as_view(), name="applicant-detail"),
     path("companies/", CompanyView.as_view(), name="company-list"),
     path("companies/<uuid:pk>/", CompanyView.as_view(), name="company-detail"),
+    # Company follower endpoints
+    path("following/", CompanyFollowerView.as_view(), name="following-list"),
+    path(
+        "companies/<uuid:company_id>/follow/",
+        CompanyFollowerView.as_view(),
+        name="follow-company",
+    ),
+    path(
+        "companies/<uuid:company_id>/check-follow/",
+        CheckFollowStatusView.as_view(),
+        name="check-follow-status",
+    ),
     # Authentication endpoints
     path("auth/register/", RegisterView.as_view(), name="register"),
     path("auth/verify-otp/", OTPVerifyView.as_view(), name="verify-otp"),

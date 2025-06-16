@@ -2,7 +2,13 @@ from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django.db.models import Q
 from django.db import transaction
-from users.models import User, ApplicantProfile, CompanyProfile, SocialLink
+from users.models import (
+    User,
+    ApplicantProfile,
+    CompanyProfile,
+    SocialLink,
+    CompanyFollower,
+)
 from users.choices import Role
 from users.utils import get_otp_from_cache
 
@@ -72,6 +78,7 @@ class UserSerializer(serializers.ModelSerializer):
                             ind.name for ind in profile.industries.all()
                         ],
                         "skill_names": [skill.name for skill in profile.skills.all()],
+                        "follower_count": profile.follower_count,
                     }
                     if profile
                     else None
@@ -110,7 +117,7 @@ class UserWithProfileSerializer(UserSerializer):
                     ).data
             return None
         except Exception as e:
-            print(f"Profile serialization error: {str(e)}")  # Thêm log để debug
+            print(f"Profile serialization error: {str(e)}")
             return None
 
 
@@ -179,6 +186,7 @@ class CompanyProfileSerializer(serializers.ModelSerializer):
             "location_names",
             "industry_names",
             "skill_names",
+            "follower_count",
         ]
 
     def get_id(self, obj):
@@ -381,3 +389,27 @@ class LoginSerializer(serializers.Serializer):
         raise serializers.ValidationError(
             {"non_field_errors": ["Must include 'username' and 'password'."]}
         )
+
+
+class CompanyFollowerSerializer(serializers.ModelSerializer):
+    applicant_id = serializers.UUIDField(source="applicant.user.id", read_only=True)
+    applicant_name = serializers.CharField(source="applicant.full_name", read_only=True)
+    company_id = serializers.UUIDField(source="company.user.id", read_only=True)
+    company_name = serializers.CharField(source="company.name", read_only=True)
+    company_logo = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CompanyFollower
+        fields = [
+            "id",
+            "applicant_id",
+            "applicant_name",
+            "company_id",
+            "company_name",
+            "company_logo",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+    def get_company_logo(self, obj):
+        return obj.company.logo.url if obj.company.logo else None

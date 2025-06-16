@@ -3,13 +3,15 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.db.models import Q
+from django.db import IntegrityError, transaction
 from jobs.models import Industry, SkillTag, Location
 from users.utils import CustomPagination
-from users.models import User, ApplicantProfile, CompanyProfile
+from users.models import User, ApplicantProfile, CompanyProfile, CompanyFollower
 from users.serializers import (
     UserSerializer,
     ApplicantProfileSerializer,
     CompanyProfileSerializer,
+    CompanyFollowerSerializer,
 )
 from users.choices import Role, Gender
 from users.permission import *
@@ -406,4 +408,183 @@ class CompanyView(BaseUserView):
             return Response(
                 {"detail": f"Error editing profile: {str(e)}"},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+class CompanyFollowerView(APIView):
+    permission_classes = [IsAuthenticated]
+    pagination_class = CustomPagination
+
+    def get(self, request, company_id=None):
+        """
+        Lấy danh sách công ty mà ứng viên đang theo dõi hoặc danh sách người theo dõi của một công ty
+        """
+        user = request.user
+
+        # Nếu là ứng viên, lấy danh sách công ty đang theo dõi
+        if user.role == Role.APPLICANT:
+            try:
+                applicant_profile = user.applicant_profile
+                followers = CompanyFollower.objects.filter(applicant=applicant_profile)
+
+                paginator = self.pagination_class()
+                paginated_queryset = paginator.paginate_queryset(followers, request)
+                serializer = CompanyFollowerSerializer(paginated_queryset, many=True)
+
+                return paginator.get_paginated_response(serializer.data)
+            except ApplicantProfile.DoesNotExist:
+                return Response(
+                    {"detail": "Applicant profile not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        # Nếu là công ty, lấy danh sách người theo dõi
+        elif user.role == Role.COMPANY:
+            try:
+                company_profile = user.company_profile
+                followers = CompanyFollower.objects.filter(company=company_profile)
+
+                paginator = self.pagination_class()
+                paginated_queryset = paginator.paginate_queryset(followers, request)
+                serializer = CompanyFollowerSerializer(paginated_queryset, many=True)
+
+                return paginator.get_paginated_response(serializer.data)
+            except CompanyProfile.DoesNotExist:
+                return Response(
+                    {"detail": "Company profile not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        # Nếu là admin, có thể xem tất cả
+        elif user.is_staff:
+            if company_id:
+                company = get_object_or_404(CompanyProfile, user__id=company_id)
+                followers = CompanyFollower.objects.filter(company=company)
+            else:
+                followers = CompanyFollower.objects.all()
+
+            paginator = self.pagination_class()
+            paginated_queryset = paginator.paginate_queryset(followers, request)
+            serializer = CompanyFollowerSerializer(paginated_queryset, many=True)
+
+            return paginator.get_paginated_response(serializer.data)
+
+        return Response(
+            {"detail": "You don't have permission to view this information"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    def post(self, request, company_id):
+        """
+        Ứng viên theo dõi một công ty
+        """
+        user = request.user
+
+        # Chỉ ứng viên mới có thể theo dõi công ty
+        if user.role != Role.APPLICANT:
+            return Response(
+                {"detail": "Only applicants can follow companies"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            with transaction.atomic():
+                applicant_profile = user.applicant_profile
+                company = get_object_or_404(CompanyProfile, user__id=company_id)
+
+                # Kiểm tra xem đã follow chưa
+                follower, created = CompanyFollower.objects.get_or_create(
+                    applicant=applicant_profile, company=company
+                )
+
+                if created:
+                    # Tăng follower_count
+                    company.follower_count += 1
+                    company.save(update_fields=["follower_count"])
+
+                    serializer = CompanyFollowerSerializer(follower)
+                    return Response(serializer.data, status=status.HTTP_201_CREATED)
+                else:
+                    return Response(
+                        {"detail": "You are already following this company"},
+                        status=status.HTTP_200_OK,
+                    )
+
+        except ApplicantProfile.DoesNotExist:
+            return Response(
+                {"detail": "Applicant profile not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+    def delete(self, request, company_id):
+        """
+        Ứng viên hủy theo dõi một công ty
+        """
+        user = request.user
+
+        # Chỉ ứng viên mới có thể hủy theo dõi công ty
+        if user.role != Role.APPLICANT:
+            return Response(
+                {"detail": "Only applicants can unfollow companies"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            with transaction.atomic():
+                applicant_profile = user.applicant_profile
+                company = get_object_or_404(CompanyProfile, user__id=company_id)
+
+                try:
+                    follower = CompanyFollower.objects.get(
+                        applicant=applicant_profile, company=company
+                    )
+
+                    # Giảm follower_count trước khi xóa
+                    company.follower_count = max(0, company.follower_count - 1)
+                    company.save(update_fields=["follower_count"])
+
+                    # Xóa bản ghi follower
+                    follower.delete()
+
+                    return Response(status=status.HTTP_204_NO_CONTENT)
+                except CompanyFollower.DoesNotExist:
+                    return Response(
+                        {"detail": "You are not following this company"},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+        except ApplicantProfile.DoesNotExist:
+            return Response(
+                {"detail": "Applicant profile not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+
+class CheckFollowStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, company_id):
+        """
+        Kiểm tra xem ứng viên có đang theo dõi công ty không
+        """
+        user = request.user
+
+        if user.role != Role.APPLICANT:
+            return Response(
+                {"detail": "Only applicants can check follow status"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            applicant_profile = user.applicant_profile
+            company = get_object_or_404(CompanyProfile, user__id=company_id)
+
+            is_following = CompanyFollower.objects.filter(
+                applicant=applicant_profile, company=company
+            ).exists()
+
+            return Response({"is_following": is_following})
+        except ApplicantProfile.DoesNotExist:
+            return Response(
+                {"detail": "Applicant profile not found"},
+                status=status.HTTP_404_NOT_FOUND,
             )

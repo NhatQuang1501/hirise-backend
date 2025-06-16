@@ -54,26 +54,6 @@ class JobApplication(models.Model):
         super().delete(*args, **kwargs)
 
 
-class CVAnalysis(models.Model):
-    """
-    Mô hình lưu trữ kết quả phân tích CV
-    """
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    application = models.OneToOneField(
-        JobApplication,
-        on_delete=models.CASCADE,
-        related_name="cv_analysis",
-    )
-    extracted_content = models.JSONField(blank=True, null=True)
-    match_score = models.FloatField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f"Analysis for {self.application}"
-
-
 class InterviewSchedule(models.Model):
     """
     Mô hình lưu trữ lịch phỏng vấn

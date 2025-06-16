@@ -25,17 +25,6 @@ class User(AbstractUser):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # groups = models.ManyToManyField(
-    #     Group,
-    #     related_name="custom_user_set",
-    #     blank=True,
-    # )
-    # user_permissions = models.ManyToManyField(
-    #     Permission,
-    #     related_name="custom_user_set",
-    #     blank=True,
-    # )
-
     def __str__(self):
         return self.username
 
@@ -94,6 +83,7 @@ class CompanyProfile(models.Model):
     description = models.TextField(blank=True)
     benefits = models.TextField(blank=True)
     founded_year = models.IntegerField(blank=True, null=True)
+    follower_count = models.IntegerField(default=0)
 
     locations = models.ManyToManyField(
         "jobs.Location",
@@ -145,4 +135,31 @@ class SocialLink(models.Model):
 
     @property
     def socialLink_id(self):
+        return self.id
+
+
+class CompanyFollower(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    applicant = models.ForeignKey(
+        ApplicantProfile,
+        on_delete=models.CASCADE,
+        related_name="following_companies",
+    )
+    company = models.ForeignKey(
+        CompanyProfile,
+        on_delete=models.CASCADE,
+        related_name="followers",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("applicant", "company")
+        verbose_name = "Company Follower"
+        verbose_name_plural = "Company Followers"
+
+    def __str__(self):
+        return f"{self.applicant.full_name} follows {self.company.name}"
+
+    @property
+    def follower_id(self):
         return self.id
