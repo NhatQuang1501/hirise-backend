@@ -394,7 +394,7 @@ class JobStatusUpdateView(APIView):
                 job.closed_date = timezone.now().date()
 
                 # Từ chối các đơn ứng tuyển chưa xử lý
-                pending_applications = job.applications.filter(
+                pending_applications = job.job_applications.filter(
                     status__in=[ApplicationStatus.PENDING, ApplicationStatus.REVIEWING]
                 )
                 pending_applications.update(
@@ -551,15 +551,14 @@ class JobStatisticsView(APIView):
         job_stats, created = JobStatistics.objects.get_or_create(job=job)
 
         # Cập nhật thống kê nếu cần
-        if created or job_stats.application_count != job.applications.count():
-            job_stats.application_count = job.applications.count()
-            job_stats.accepted_count = job.applications.filter(
+        if created or job_stats.application_count != job.job_applications.count():
+            job_stats.application_count = job.job_applications.count()
+            job_stats.accepted_count = job.job_applications.filter(
                 status=ApplicationStatus.ACCEPTED
             ).count()
-            job_stats.rejected_count = job.applications.filter(
+            job_stats.rejected_count = job.job_applications.filter(
                 status=ApplicationStatus.REJECTED
             ).count()
-            job_stats.save()
 
         # Serialize và trả về kết quả
         serializer = JobStatisticsSerializer(job_stats)
@@ -567,7 +566,7 @@ class JobStatisticsView(APIView):
 
 
 class CompanyJobsView(APIView):
-    """API to get all jobs for a specific company"""
+    """API to get all jobs for a specific company with optional status filtering"""
 
     permission_classes = [AllowAny]
     pagination_class = CustomPagination
@@ -576,16 +575,35 @@ class CompanyJobsView(APIView):
         # Kiểm tra company tồn tại
         company = get_object_or_404(CompanyProfile, user_id=company_id)
 
+        # Lấy status filter từ query params (all, published, draft, closed)
+        status_filter = request.query_params.get("status", "all").lower()
+
         # Lấy danh sách job của company
         queryset = Job.objects.filter(company=company)
 
-        # Chỉ hiển thị job PUBLISHED trừ khi người xem là company sở hữu
+        # Áp dụng filter theo status nếu có
+        if status_filter != "all":
+            if status_filter in dict(JobStatus.choices):
+                queryset = queryset.filter(status=status_filter)
+            else:
+                return Response(
+                    {
+                        "detail": f"Invalid status filter. Must be one of: all, {', '.join(JobStatus.get_values())}"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # Kiểm tra quyền xem
+        # Nếu không phải company sở hữu, chỉ hiển thị job PUBLISHED
         if (
             not request.user.is_authenticated
             or request.user.role != Role.COMPANY
             or request.user.company_profile != company
         ):
             queryset = queryset.filter(status=JobStatus.PUBLISHED)
+
+        # Sắp xếp theo thời gian tạo mới nhất
+        queryset = queryset.order_by("-created_at")
 
         # Phân trang
         paginator = self.pagination_class()
@@ -597,6 +615,47 @@ class CompanyJobsView(APIView):
         )
 
         return paginator.get_paginated_response(serializer.data)
+
+
+class CompanyJobsCountView(APIView):
+    """API to get count of jobs by status for a specific company"""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, company_id):
+        # Kiểm tra company tồn tại
+        company = get_object_or_404(CompanyProfile, user_id=company_id)
+
+        # Kiểm tra quyền xem
+        if request.user.role != Role.ADMIN and (
+            request.user.role != Role.COMPANY or request.user.company_profile != company
+        ):
+            return Response(
+                {"detail": "You do not have permission to view these statistics"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Đếm số lượng job theo từng trạng thái
+        total_count = Job.objects.filter(company=company).count()
+        published_count = Job.objects.filter(
+            company=company, status=JobStatus.PUBLISHED
+        ).count()
+        draft_count = Job.objects.filter(
+            company=company, status=JobStatus.DRAFT
+        ).count()
+        closed_count = Job.objects.filter(
+            company=company, status=JobStatus.CLOSED
+        ).count()
+
+        # Trả về kết quả
+        return Response(
+            {
+                "all": total_count,
+                "published": published_count,
+                "draft": draft_count,
+                "closed": closed_count,
+            }
+        )
 
 
 class CompanyStatisticsView(APIView):

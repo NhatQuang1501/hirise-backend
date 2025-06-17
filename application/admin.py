@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import JobApplication, CVAnalysis, InterviewSchedule, TestFileUpload
+from .models import JobApplication, InterviewSchedule, TestFileUpload, CVAnalysis
 
 
 class JobApplicationAdmin(admin.ModelAdmin):

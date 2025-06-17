@@ -13,6 +13,7 @@ from jobs.views.job_views import (
     ApplicantSavedJobsView,
     CompanyJobsView,
     CompanyStatisticsView,
+    CompanyJobsCountView,
 )
 
 app_name = "jobs"
@@ -44,6 +45,11 @@ urlpatterns = [
         "companies/<uuid:company_id>/statistics/",
         CompanyStatisticsView.as_view(),
         name="company-statistics",
+    ),
+    path(
+        "companies/<uuid:company_id>/jobs-count/",
+        CompanyJobsCountView.as_view(),
+        name="company-jobs-count",
     ),
     # Saved job endpoints
     path("saved-jobs/", SavedJobListView.as_view(), name="saved-job-list"),
