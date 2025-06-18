@@ -60,6 +60,7 @@ class JobApplicationSerializer(serializers.ModelSerializer):
             "id": obj.job.id,
             "title": obj.job.title,
             "company_name": obj.job.company.name,
+            "company_logo": obj.job.company.logo.url if obj.job.company.logo else None,
         }
 
     def get_cv_filename(self, obj):

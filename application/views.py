@@ -200,6 +200,15 @@ class JobApplicationDetailView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # Kiểm tra trạng thái đơn - chỉ cho phép rút đơn khi ở trạng thái PENDING
+        if application.status != ApplicationStatus.PENDING:
+            return Response(
+                {
+                    "detail": "Cannot withdraw application that is already being processed."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         application.delete()
         return Response(
             {"success": True, "message": "Application withdrawn successfully."},
@@ -354,6 +363,15 @@ class JobApplicationStatusView(APIView):
                 return Response(
                     {"detail": "Only applicants can withdraw their own applications."},
                     status=status.HTTP_403_FORBIDDEN,
+                )
+
+            # Kiểm tra trạng thái đơn - chỉ cho phép rút đơn khi ở trạng thái PENDING
+            if application.status != ApplicationStatus.PENDING:
+                return Response(
+                    {
+                        "detail": "Cannot withdraw application that is already being processed."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
             # Xóa application thay vì chuyển trạng thái
