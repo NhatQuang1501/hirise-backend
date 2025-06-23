@@ -9,7 +9,22 @@ on:
   workflow_dispatch:
 
 jobs:
+  check_dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Check dependencies
+        run: |
+          python scripts/check_dependencies.py
+
   build:
+    needs: check_dependencies
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
