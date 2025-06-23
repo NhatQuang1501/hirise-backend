@@ -2,10 +2,21 @@ from django.db import models
 import uuid
 import os
 from django.conf import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Đường dẫn lưu trữ dữ liệu đã xử lý
 JOB_DATA_DIR = os.path.join(settings.BASE_DIR, "AI", "job_processed_data")
-os.makedirs(JOB_DATA_DIR, exist_ok=True)
+CV_DATA_DIR = os.path.join(settings.BASE_DIR, "AI", "cv_processed_data")
+
+# Đảm bảo thư mục tồn tại
+try:
+    os.makedirs(JOB_DATA_DIR, exist_ok=True)
+    os.makedirs(CV_DATA_DIR, exist_ok=True)
+    logger.info(f"Created directories: {JOB_DATA_DIR} and {CV_DATA_DIR}")
+except Exception as e:
+    logger.error(f"Error creating directories: {e}")
 
 
 class JobProcessedData(models.Model):

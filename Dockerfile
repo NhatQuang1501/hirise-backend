@@ -19,6 +19,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Tạo thư mục cho AI và cấp quyền
+RUN mkdir -p /app/AI/cv_processed_data /app/AI/job_processed_data
+RUN chmod -R 777 /app/AI/cv_processed_data /app/AI/job_processed_data
+
 # Copy toàn bộ code vào container
 COPY . .
 COPY ./scripts /scripts
@@ -26,7 +30,9 @@ RUN chmod +x /scripts/*
 
 # Tạo user không phải root để chạy ứng dụng
 RUN adduser --disabled-password --no-create-home app-user
-RUN chown -R app-user:app-user /app
+# Chỉ thay đổi quyền sở hữu cho các file trong container, không bao gồm thư mục được mount
+RUN find /app -not -path "/app/AI/cv_processed_data*" -not -path "/app/AI/job_processed_data*" -exec chown -R app-user:app-user {} \; 2>/dev/null || true
+
 USER app-user
 
 # Mặc định sẽ chạy entrypoint.sh

@@ -146,8 +146,16 @@ class MatchingService:
         )
 
         # 2. Yêu cầu công việc vs Kinh nghiệm CV
+        combined_experience = cv_data.experience
+        if not combined_experience.strip() and cv_data.projects:
+            # If no experience but has projects, use projects instead
+            combined_experience = cv_data.projects
+        elif cv_data.projects:
+            # If has both experience and projects, combine them
+            combined_experience = f"{cv_data.experience}\n{cv_data.projects}"
+
         scores["job_requirements_cv_experience"] = self.compute_similarity(
-            job_data.basic_requirements, cv_data.experience
+            job_data.basic_requirements, combined_experience
         )
 
         # 3. Kỹ năng công việc vs Kỹ năng CV
@@ -164,7 +172,7 @@ class MatchingService:
 
         # 4. Trách nhiệm công việc vs Kinh nghiệm CV
         scores["job_responsibilities_cv_experience"] = self.compute_similarity(
-            job_data.responsibilities, cv_data.experience
+            job_data.responsibilities, combined_experience
         )
 
         # 5. Tiêu đề công việc vs Tóm tắt CV

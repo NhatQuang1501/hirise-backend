@@ -7,6 +7,7 @@ from sentence_transformers import SentenceTransformer
 import logging
 from django.conf import settings
 from .models import JobProcessedData
+import traceback
 
 # Thiết lập logging
 logger = logging.getLogger(__name__)
@@ -192,16 +193,29 @@ class JobProcessor:
                 # Lưu embedding vào file
                 embedding_filename = f"job_{job.id}.npy"
                 embedding_path = os.path.join(JOB_DATA_DIR, embedding_filename)
+
+                # Debug
+                logger.info(f"Saving job embedding to: {embedding_path}")
+
+                # Kiểm tra thư mục tồn tại
+                os.makedirs(os.path.dirname(embedding_path), exist_ok=True)
+
                 np.save(embedding_path, embedding)
+                logger.info(f"Successfully saved job embedding for job {job.id}")
 
                 # Cập nhật đường dẫn file
                 job_data.embedding_file = embedding_filename
                 job_data.save()
+            else:
+                logger.warning(
+                    f"SBERT model not initialized, skipping embedding creation for job {job.id}"
+                )
 
             return job_data
 
         except Exception as e:
             logger.error(f"Lỗi khi xử lý job {job.id}: {e}")
+            logger.error(traceback.format_exc())
             return None
 
 
