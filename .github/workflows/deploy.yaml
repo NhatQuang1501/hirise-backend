@@ -3,9 +3,13 @@ name: Deploy to Digital Ocean
 on:
   push:
     branches: [ deploy ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -25,18 +29,20 @@ jobs:
           context: .
           push: true
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/hirise-backend:latest
+          cache-from: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/hirise-backend:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/hirise-backend:buildcache,mode=max
 
-      # - name: Install doctl
-      #   uses: digitalocean/action-doctl@v2
-      #   with:
-      #     token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
       - name: Deploy to Digital Ocean Droplet
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.DROPLET_IP }}
           username: ${{ secrets.DROPLET_SSH_USER }}
           key: ${{ secrets.DROPLET_SSH_KEY }}
+          command_timeout: 30m
           script: |
             cd /root/hirise
             docker-compose pull
