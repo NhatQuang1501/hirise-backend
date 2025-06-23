@@ -2,7 +2,7 @@
 
 set -e
 
-# # Đợi database sẵn sàng
+# Sử dụng biến môi trường DB_*_DEPLOY thay vì DB_*
 # echo "Waiting for PostgreSQL..."
 # while ! nc -z $DB_HOST_DEPLOY $DB_PORT_DEPLOY; do
 #   sleep 0.1
