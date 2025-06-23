@@ -8,6 +8,7 @@ from django.db.models import Q, Count
 from django.utils import timezone
 from django.db import transaction
 
+from application.models import JobApplication
 from jobs.models import (
     Job,
     SavedJob,
@@ -123,7 +124,7 @@ class JobListView(APIView):
             queryset = filterset.qs
 
         # Áp dụng ordering
-        ordering = request.query_params.get("ordering", "-created_at")
+        ordering = request.query_params.get("ordering", "created_at")
         if ordering:
             queryset = queryset.order_by(ordering)
 
@@ -732,8 +733,10 @@ class SavedJobListView(APIView):
     def get(self, request):
         # Lấy danh sách saved jobs của applicant hiện tại
         applicant = request.user.applicant_profile
-        queryset = SavedJob.objects.filter(applicant=applicant).select_related(
-            "job", "job__company"
+        queryset = (
+            SavedJob.objects.filter(applicant=applicant)
+            .select_related("job", "job__company")
+            .order_by("-job__created_at")
         )
 
         # Phân trang
@@ -770,6 +773,9 @@ class ApplicantSavedJobsView(APIView):
         queryset = SavedJob.objects.filter(applicant=applicant).select_related(
             "job", "job__company"
         )
+
+        # Thêm sắp xếp theo thời gian tạo job mới nhất
+        queryset = queryset.order_by("-job__created_at")
 
         # Phân trang
         paginator = self.pagination_class()

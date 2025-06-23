@@ -9,11 +9,13 @@ while ! nc -z $DB_HOST $DB_PORT; do
 done
 echo "PostgreSQL started"
 
+# Đảm bảo thư mục AI tồn tại và có quyền ghi
+mkdir -p /app/AI/cv_processed_data /app/AI/job_processed_data
+chmod -R 777 /app/AI/cv_processed_data /app/AI/job_processed_data
+echo "AI directories checked and permissions set"
+
 # Thực hiện migrations
 python manage.py migrate
-
-# Tạo superuser nếu chưa có (tùy chọn)
-python manage.py shell -c "from users.models import User; User.objects.filter(email='admin@gmail.com').exists() or User.objects.create_superuser('admin@gmail.com', 'adminpassword')"
 
 # Thu thập static files
 python manage.py collectstatic --noinput

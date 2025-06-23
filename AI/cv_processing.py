@@ -672,8 +672,17 @@ class CVProcessor:
                 embedding_filename = f"cv_{application.id}.json"
                 embedding_path = os.path.join(CV_DATA_DIR, embedding_filename)
 
+                # Debug
+                logger.info(f"Saving CV embedding to: {embedding_path}")
+
+                # Kiểm tra thư mục tồn tại
+                os.makedirs(os.path.dirname(embedding_path), exist_ok=True)
+
                 with open(embedding_path, "w", encoding="utf-8") as f:
                     json.dump(embeddings, f, ensure_ascii=False)
+                    logger.info(
+                        f"Successfully saved CV embedding for application {application.id}"
+                    )
 
                 # Cập nhật đường dẫn file
                 cv_processed_data.embedding_file = embedding_filename

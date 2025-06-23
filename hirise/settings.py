@@ -50,9 +50,9 @@ INSTALLED_APPS = [
     "drf_yasg",
     "django_filters",
     "users",
-    "jobs",
+    "jobs.apps.JobsConfig",
     "application",
-    "AI",
+    "AI.apps.AIConfig",
     # "notification",
 ]
 
@@ -94,14 +94,20 @@ ASGI_APPLICATION = "hirise.asgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("DB_NAME"),
-        "USER": os.environ.get("DB_USER"),
-        "PASSWORD": os.environ.get("DB_PASSWORD"),
-        "HOST": os.environ.get("DB_HOST"),
-        "PORT": os.environ.get("DB_PORT"),
+        # "NAME": os.environ.get("DB_NAME"),
+        # "USER": os.environ.get("DB_USER"),
+        # "PASSWORD": os.environ.get("DB_PASSWORD"),
+        # "HOST": os.environ.get("DB_HOST"),
+        # "PORT": os.environ.get("DB_PORT"),
+        "NAME": os.environ.get("DB_NAME_DEPLOY"),
+        "USER": os.environ.get("DB_USER_DEPLOY"),
+        "PASSWORD": os.environ.get("DB_PASSWORD_DEPLOY"),
+        "HOST": os.environ.get("DB_HOST_DEPLOY"),
+        "PORT": os.environ.get("DB_PORT_DEPLOY"),
         "CONN_MAX_AGE": None,  # Persistent connections
         "OPTIONS": {
             "connect_timeout": 10,
+            "sslmode": "require",
         },
     }
 }

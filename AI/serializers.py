@@ -249,17 +249,81 @@ class JobCVMatchSerializer(serializers.ModelSerializer):
         return strengths
 
     def get_areas_to_improve(self, obj):
-        """Xác định các lĩnh vực cần cải thiện"""
+        """Identify areas that need improvement"""
         scores = obj.detailed_scores
         if not scores:
             return []
 
         improvements = []
 
-        # Xác định 3 điểm yếu nhất
+        # Check if the candidate is a student/recent graduate
+        try:
+            cv_data = CVProcessedData.objects.get(application=obj.application)
+            is_student = False
+
+            # Check for student-related keywords in summary and education
+            student_keywords = [
+                "student",
+                "studying",
+                "recent graduate",
+                "undergraduate",
+                "graduate",
+                "university",
+                "college",
+                "fresh graduate",
+                "freshman",
+                "sophomore",
+                "final year student",
+                "fourth year student",
+                "third year student",
+                "second year student",
+                "first year student",
+            ]
+            if cv_data.summary:
+                if any(
+                    keyword in cv_data.summary.lower() for keyword in student_keywords
+                ):
+                    is_student = True
+            if cv_data.education:
+                if "present" in cv_data.education.lower() or any(
+                    keyword in cv_data.education.lower() for keyword in student_keywords
+                ):
+                    is_student = True
+
+            # If student with no experience but has projects
+            if (
+                is_student
+                and not cv_data.experience.strip()
+                and cv_data.projects.strip()
+            ):
+                # Skip weaknesses related to experience
+                sorted_scores = sorted(scores.items(), key=lambda x: x[1])
+                for key, value in sorted_scores:
+                    if value < 0.3:  # 30% threshold
+                        if key == "job_requirements_cv_skills":
+                            improvements.append(
+                                "Need to improve skills to match job requirements"
+                            )
+                        elif key == "job_skills_cv_skills":
+                            improvements.append("Need to improve technical skills")
+                        # Skip experience-related weaknesses
+                        elif key == "job_title_cv_summary":
+                            improvements.append("Summary does not match job title")
+
+                # If no weaknesses were added but match score is low
+                if not improvements and obj.match_score < 60:
+                    improvements.append(
+                        "Consider adding more relevant projects to showcase practical skills"
+                    )
+
+                return improvements[:3]  # Limit to 3 weaknesses
+        except CVProcessedData.DoesNotExist:
+            pass
+
+        # Default processing if not a student or can't determine
         sorted_scores = sorted(scores.items(), key=lambda x: x[1])[:3]
         for key, value in sorted_scores:
-            if value < 0.3:  # Ngưỡng 30%
+            if value < 0.3:  # 30% threshold
                 if key == "job_requirements_cv_skills":
                     improvements.append(
                         "Need to improve skills to match job requirements"
