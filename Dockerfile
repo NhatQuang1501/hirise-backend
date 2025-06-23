@@ -4,11 +4,10 @@ FROM python:3.11-slim as builder
 WORKDIR /app
 COPY requirements.txt .
 
-# Loại bỏ các thư viện Windows
-RUN grep -v "pywin32" requirements.txt > requirements-linux.txt
-
-# Cài đặt dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
+# Loại bỏ các thư viện Windows và cài đặt Django trực tiếp
+RUN grep -v "pywin32" requirements.txt > requirements-linux.txt && \
+    pip install --no-cache-dir --upgrade pip && \
+    pip install django && \
     pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements-linux.txt
 
 # Final stage
@@ -27,11 +26,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Cài đặt Django trước
+RUN pip install --no-cache-dir django psycopg2-binary gunicorn
+
 # Cài đặt Python packages từ wheels
 COPY --from=builder /app/wheels /wheels
 COPY --from=builder /app/requirements-linux.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir --no-index --find-links=/wheels -r requirements-linux.txt
+RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements-linux.txt
 
 # Tạo thư mục cho AI và cấp quyền
 RUN mkdir -p /app/AI/cv_processed_data /app/AI/job_processed_data
