@@ -7,7 +7,7 @@ COPY requirements.txt .
 # Loại bỏ các thư viện Windows và cài đặt Django trực tiếp
 RUN grep -v "pywin32" requirements.txt > requirements-linux.txt && \
     pip install --no-cache-dir --upgrade pip && \
-    pip install django python-dotenv daphne channels && \
+    pip install django python-dotenv daphne channels djangorestframework && \
     pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements-linux.txt
 
 # Final stage
@@ -26,8 +26,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Cài đặt Django và các thư viện cần thiết trước
-RUN pip install --no-cache-dir django psycopg2-binary gunicorn python-dotenv daphne channels
+# Cài đặt các thư viện cần thiết trước
+RUN pip install --no-cache-dir \
+    django \
+    psycopg2-binary \
+    gunicorn \
+    python-dotenv \
+    daphne \
+    channels \
+    djangorestframework \
+    django-cors-headers \
+    django-filter \
+    Pillow \
+    whitenoise \
+    redis \
+    celery \
+    boto3 \
+    django-storages
 
 # Cài đặt Python packages từ wheels
 COPY --from=builder /app/wheels /wheels
