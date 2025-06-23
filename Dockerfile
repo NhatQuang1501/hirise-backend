@@ -29,7 +29,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Cài đặt Python packages từ wheels
 COPY --from=builder /app/wheels /wheels
-RUN pip install --no-cache-dir /wheels/*
+COPY --from=builder /app/requirements-linux.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir --no-index --find-links=/wheels -r requirements-linux.txt
 
 # Tạo thư mục cho AI và cấp quyền
 RUN mkdir -p /app/AI/cv_processed_data /app/AI/job_processed_data
