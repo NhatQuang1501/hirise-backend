@@ -255,12 +255,12 @@ class JobApplicationAnalyzeView(APIView):
         # Gửi task xử lý CV bất đồng bộ
         process_cv_task.delay(str(application.id))
 
-            return Response(
-                {
-                    "success": True,
+        return Response(
+            {
+                "success": True,
                 "message": "CV analysis started. Results will be available shortly.",
-                }
-            )
+            }
+        )
 
 
 class JobApplicationStatusView(APIView):
