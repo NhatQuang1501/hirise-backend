@@ -20,6 +20,7 @@ from .permissions import IsApplicantOwner, IsCompanyOwner
 from .filters import JobApplicationFilter
 from AI.cv_processing import process_cv_on_application
 from AI.matching_service import MatchingService
+from AI.tasks import process_cv_task
 from users.utils import CustomPagination
 
 
@@ -251,46 +252,14 @@ class JobApplicationAnalyzeView(APIView):
         application.status = ApplicationStatus.PROCESSING
         application.save()
 
-        try:
-            # Xử lý CV và lưu dữ liệu
-            processed_data = process_cv_on_application(application)
-
-            # Phân tích mức độ phù hợp
-            matching_service = MatchingService()
-            match_result = matching_service.match_job_cv(
-                application.job.id, application_id=application.id
-            )
-            match_score = match_result.match_score if match_result else 0
-
-            # Lưu kết quả phân tích
-            cv_analysis, created = CVAnalysis.objects.update_or_create(
-                application=application,
-                defaults={
-                    "extracted_content": processed_data.combined_text,
-                    "match_score": match_score,
-                },
-            )
-
-            # Cập nhật trạng thái đã xem xét
-            application.status = ApplicationStatus.REVIEWING
-            application.save()
+        # Gửi task xử lý CV bất đồng bộ
+        process_cv_task.delay(str(application.id))
 
             return Response(
                 {
                     "success": True,
-                    "match_score": match_score,
-                    "message": "CV analysis completed successfully.",
+                "message": "CV analysis started. Results will be available shortly.",
                 }
-            )
-
-        except Exception as e:
-            # Nếu có lỗi, đặt lại trạng thái
-            application.status = ApplicationStatus.PENDING
-            application.save()
-
-            return Response(
-                {"success": False, "message": f"Failed to analyze CV: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST,
             )
 
 

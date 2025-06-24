@@ -3,6 +3,7 @@ from django.dispatch import receiver
 from .models import Job
 from users.choices import JobStatus
 import logging
+from AI.tasks import process_job_task
 
 # Import module xử lý job data
 try:
@@ -31,7 +32,7 @@ def job_post_save(sender, instance, created, **kwargs):
     if created:
         return
 
-    # Nếu job được cập nhật và có trạng thái PUBLISHED, xử lý lại dữ liệu
+    # Nếu job được cập nhật và có trạng thái PUBLISHED, xử lý lại dữ liệu bất đồng bộ
     if instance.status == JobStatus.PUBLISHED:
         try:
             # Tìm và xóa dữ liệu cũ nếu có
@@ -39,8 +40,8 @@ def job_post_save(sender, instance, created, **kwargs):
 
             JobProcessedData.objects.filter(job=instance).delete()
 
-            # Xử lý lại dữ liệu
-            process_job_on_update(instance)
-            logging.info(f"Job {instance.id} processed successfully after update")
+            # Gửi task xử lý job bất đồng bộ
+            process_job_task.delay(str(instance.id), "update")
+            logging.info(f"Job {instance.id} processing task queued")
         except Exception as e:
-            logging.error(f"Error processing job {instance.id} after update: {e}")
+            logging.error(f"Error queueing job processing: {e}")
