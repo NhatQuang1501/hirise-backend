@@ -56,27 +56,90 @@ class JobApplicationSerializer(serializers.ModelSerializer):
         }
 
     def get_job_details(self, obj):
-        return {
-            "id": obj.job.id,
-            "title": obj.job.title,
-            "company_name": obj.job.company.name,
-            "company_logo": obj.job.company.logo.url if obj.job.company.logo else None,
-        }
+        try:
+            return {
+                "id": obj.job.id,
+                "title": obj.job.title,
+                "company_name": (
+                    obj.job.company.name if hasattr(obj.job, "company") else "Unknown"
+                ),
+                "company_logo": (
+                    obj.job.company.logo.url
+                    if hasattr(obj.job, "company") and obj.job.company.logo
+                    else None
+                ),
+            }
+        except Exception as e:
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error getting job_details: {str(e)}")
+            return {
+                "id": str(obj.job.id) if hasattr(obj, "job") else None,
+                "title": "Unknown",
+                "company_name": "Unknown",
+                "company_logo": None,
+            }
 
     def get_cv_filename(self, obj):
-        return obj.get_cv_filename()
+        try:
+            return obj.get_cv_filename()
+        except Exception:
+            return "unknown.pdf"
 
     def get_applicant_profile(self, obj):
-        return {
-            "id": obj.applicant.user.id,
-            "username": obj.applicant.user.username,
-            "email": obj.applicant.user.email,
-            "full_name": obj.applicant.full_name,
-            "phone_number": obj.applicant.phone_number,
-            "date_of_birth": obj.applicant.date_of_birth,
-            "gender": obj.applicant.gender,
-            "description": obj.applicant.description,
-        }
+        try:
+            return {
+                "id": obj.applicant.user.id if hasattr(obj.applicant, "user") else None,
+                "username": (
+                    obj.applicant.user.username
+                    if hasattr(obj.applicant, "user")
+                    else "unknown"
+                ),
+                "email": (
+                    obj.applicant.user.email
+                    if hasattr(obj.applicant, "user")
+                    else "unknown@example.com"
+                ),
+                "full_name": (
+                    obj.applicant.full_name
+                    if hasattr(obj.applicant, "full_name")
+                    else "Unknown"
+                ),
+                "phone_number": (
+                    obj.applicant.phone_number
+                    if hasattr(obj.applicant, "phone_number")
+                    else ""
+                ),
+                "date_of_birth": (
+                    obj.applicant.date_of_birth
+                    if hasattr(obj.applicant, "date_of_birth")
+                    else None
+                ),
+                "gender": (
+                    obj.applicant.gender if hasattr(obj.applicant, "gender") else ""
+                ),
+                "description": (
+                    obj.applicant.description
+                    if hasattr(obj.applicant, "description")
+                    else ""
+                ),
+            }
+        except Exception as e:
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error getting applicant_profile: {str(e)}")
+            return {
+                "id": None,
+                "username": "unknown",
+                "email": "unknown@example.com",
+                "full_name": "Unknown",
+                "phone_number": "",
+                "date_of_birth": None,
+                "gender": "",
+                "description": "",
+            }
 
     def get_status_display(self, obj):
         # Lấy label hiển thị của status từ ApplicationStatus

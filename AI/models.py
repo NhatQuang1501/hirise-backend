@@ -47,6 +47,9 @@ class JobProcessedData(models.Model):
     # Dữ liệu đã được kết hợp cho SBERT
     combined_text = models.TextField(blank=True)
 
+    # Thông tin yêu cầu kinh nghiệm
+    experience_requirements = models.JSONField(blank=True, null=True, default=dict)
+
     # Đường dẫn đến file lưu vector embedding
     embedding_file = models.CharField(max_length=255, blank=True)
 
@@ -82,6 +85,9 @@ class CVProcessedData(models.Model):
     # Danh sách kỹ năng đã trích xuất
     extracted_skills = models.JSONField(blank=True, null=True)
 
+    # Chi tiết kinh nghiệm (số năm kinh nghiệm với từng công nghệ)
+    experience_details = models.JSONField(blank=True, null=True, default=dict)
+
     # Nội dung đầy đủ
     full_text = models.TextField(blank=True)
 
@@ -100,32 +106,51 @@ class CVProcessedData(models.Model):
 
 class JobCVMatch(models.Model):
     """
-    Mô hình lưu trữ kết quả đánh giá sự phù hợp giữa job và CV
+    Mô hình lưu trữ kết quả đánh giá độ phù hợp giữa job và CV
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     job = models.ForeignKey(
-        "jobs.Job", on_delete=models.CASCADE, related_name="cv_matches"
+        "jobs.Job",
+        on_delete=models.CASCADE,
+        related_name="cv_matches",
     )
     application = models.ForeignKey(
-        "application.JobApplication", on_delete=models.CASCADE, related_name="job_match"
+        "application.JobApplication",
+        on_delete=models.CASCADE,
+        related_name="job_matches",
+        null=True,
+        blank=True,
+    )
+    cv_processed_data = models.ForeignKey(
+        CVProcessedData,
+        on_delete=models.CASCADE,
+        related_name="job_matches",
+        null=True,
+        blank=True,
     )
 
-    # Điểm phù hợp tổng thể (0-100)
-    match_score = models.FloatField(default=0.0)
+    # Điểm số tổng hợp
+    match_score = models.FloatField(default=0)
 
-    # Điểm chi tiết cho từng phần
-    detailed_scores = models.JSONField(blank=True, null=True)
+    # Điểm số chi tiết cho từng phần
+    detail_scores = models.JSONField(blank=True, null=True)
 
-    # Thời gian đánh giá
+    # Thêm trường match_details
+    match_details = models.JSONField(default=dict)
+
+    # Phân tích chi tiết về điểm mạnh/yếu
+    strengths = models.JSONField(blank=True, null=True)
+    weaknesses = models.JSONField(blank=True, null=True)
+
+    # Giải thích về kết quả đánh giá
+    explanation = models.JSONField(blank=True, null=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        # Đảm bảo mỗi cặp job-application chỉ có một bản ghi đánh giá
         unique_together = ("job", "application")
-        # Sắp xếp mặc định theo điểm giảm dần
-        ordering = ["-match_score"]
 
     def __str__(self):
-        return f"Match score {self.match_score:.2f}% for {self.application} with {self.job.title}"
+        return f"Match between {self.job.title} and Application {self.application_id}"

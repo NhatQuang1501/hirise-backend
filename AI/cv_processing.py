@@ -23,8 +23,7 @@ os.makedirs(CV_DATA_DIR, exist_ok=True)
 try:
     nlp = spacy.load("en_core_web_sm")
 except OSError:
-    logger.warning("Đang cài đặt mô hình en_core_web_sm...")
-
+    logger.warning("Installing en_core_web_sm model...")
     os.system("python -m spacy download en_core_web_sm")
     nlp = spacy.load("en_core_web_sm")
 
@@ -35,198 +34,227 @@ class CVProcessor:
     """
 
     def __init__(self, model_name="all-MiniLM-L6-v2"):
-        # Danh sách các mẫu tiêu đề cho từng phần thông tin
+        # Khởi tạo SBERT model
+        try:
+            self.model = SentenceTransformer(model_name)
+        except Exception as e:
+            logger.error(f"Error initializing SBERT model: {e}")
+            self.model = None
+
+        # Tải danh sách kỹ năng IT
+        try:
+            with open(os.path.join(settings.BASE_DIR, "AI", "it_skills.txt"), "r") as f:
+                self.it_skills = [line.strip().lower() for line in f.readlines()]
+        except Exception as e:
+            logger.error(f"Error loading IT skills list: {e}")
+            self.it_skills = []
+
+        # Thêm định nghĩa section_patterns
         self.section_patterns = {
             "summary": [
                 "summary",
-                "profile",
-                "objective",
-                "about me",
                 "professional summary",
+                "profile",
+                "about me",
                 "personal statement",
-                "introduction",
-                "overview",
-                "career objective",
-                "professional profile",
-                "career summary",
-                "about",
-                "career profile",
-                "bio",
+                "objective",
             ],
             "experience": [
                 "experience",
                 "work experience",
-                "employment",
+                "employment history",
                 "work history",
                 "professional experience",
-                "career history",
-                "employment history",
-                "professional background",
-                "work background",
-                "career experience",
-                "relevant experience",
-                "job history",
-                "professional career",
+                "experiences",
+                "work experiences",
+                "work history",
+                "experience summary",
             ],
             "education": [
                 "education",
-                "academic",
-                "qualifications",
-                "educational background",
                 "academic background",
-                "academic qualifications",
-                "educational qualifications",
                 "academic history",
-                "educational history",
-                "academic achievements",
-                "degrees",
-                "academic record",
-                "educational record",
-                "studies",
+                "qualifications",
+                "educations",
+                "education summary",
+                "education history",
+                "education background",
+                "education summary",
+                "education history",
+                "education background",
             ],
             "skills": [
                 "skills",
                 "technical skills",
                 "core competencies",
                 "key skills",
-                "professional skills",
-                "tech stack",
-                "technologies",
-                "tech skills",
-                "technical proficiency",
                 "expertise",
-                "competencies",
-                "capabilities",
-                "technical expertise",
-                "skill set",
-                "technical knowledge",
-                "proficiencies",
-                "technical capabilities",
-                "technology skills",
-                "areas of expertise",
-                "technical competencies",
-                "key competencies",
-                "professional competencies",
-                "specialized skills",
-                "professional capabilities",
+                "skills summary",
+                "tech stack",
             ],
             "projects": [
                 "projects",
                 "personal projects",
-                "academic projects",
-                "portfolio",
-                "project experience",
-                "relevant projects",
-                "key projects",
                 "professional projects",
-                "project work",
-                "project portfolio",
-                "featured projects",
-                "major projects",
-                "significant projects",
-                "project highlights",
-                "project achievements",
+                "key projects",
+                "projects summary",
+                "project summary",
             ],
             "certifications": [
                 "certifications",
                 "certificates",
                 "professional certifications",
-                "accreditations",
-                "credentials",
-                "professional credentials",
-                "qualifications",
-                "professional qualifications",
-                "licenses",
-                "certified",
-                "certification",
             ],
-            "languages": [
-                "languages",
-                "language proficiency",
-                "language skills",
-                "foreign languages",
-                "spoken languages",
-                "language capabilities",
-            ],
-            "achievements": [
-                "achievements",
-                "accomplishments",
-                "awards",
-                "honors",
-                "honors & awards",
-                "recognitions",
-                "accolades",
-                "professional achievements",
-                "career achievements",
-                "notable achievements",
-                "key achievements",
-                "significant accomplishments",
-                "distinctions",
-            ],
+            "languages": ["languages", "language proficiency", "language skills"],
+            "achievements": ["achievements", "awards", "honors", "accomplishments"],
         }
 
-        # Từ điển để chuẩn hóa tên các phần
-        self.section_mapping = {}
-        for standard_name, variations in self.section_patterns.items():
-            for variation in variations:
-                self.section_mapping[variation.lower()] = standard_name
+        # Thêm định nghĩa section_mapping
+        self.section_mapping = {
+            "summary": "summary",
+            "profile": "summary",
+            "about": "summary",
+            "experience": "experience",
+            "work": "experience",
+            "employment": "experience",
+            "education": "education",
+            "academic": "education",
+            "qualifications": "education",
+            "skills": "skills",
+            "technical": "skills",
+            "competencies": "skills",
+            "expertise": "skills",
+            "projects": "projects",
+            "certifications": "certifications",
+            "certificates": "certifications",
+            "languages": "languages",
+            "achievements": "achievements",
+            "awards": "achievements",
+            "honors": "achievements",
+        }
 
-        # Khởi tạo SBERT model
+    def extract_text_from_pdf(self, pdf_path):
+        """
+        Trích xuất văn bản từ file PDF
+        """
         try:
-            self.model = SentenceTransformer(model_name)
+            text = ""
+            with fitz.open(pdf_path) as doc:
+                for page in doc:
+                    text += page.get_text()
+            return text
         except Exception as e:
-            logger.error(f"Lỗi khi khởi tạo SBERT model: {e}")
-            self.model = None
+            logger.error(f"Error extracting text from PDF: {e}")
+            return ""
 
     def extract_text_from_docx(self, docx_path):
         """
-        Trích xuất nội dung văn bản từ file DOCX
+        Trích xuất văn bản từ file DOCX
         """
         try:
             text = docx2txt.process(docx_path)
             return text
         except Exception as e:
-            logger.error(f"Lỗi khi trích xuất văn bản từ file DOCX: {e}")
-            return None
-
-    def extract_text_from_pdf(self, pdf_path):
-        """
-        Trích xuất nội dung văn bản từ file PDF sử dụng PyMuPDF
-        """
-        try:
-            doc = fitz.open(pdf_path)
-            text = ""
-            for page_num in range(len(doc)):
-                page = doc[page_num]
-                page_text = page.get_text()
-                text += page_text + "\n\n"
-            doc.close()
-            return text
-        except Exception as e:
-            logger.error(f"Lỗi khi trích xuất văn bản từ file PDF: {e}")
-            return None
+            logger.error(f"Error extracting text from DOCX: {e}")
+            return ""
 
     def clean_text(self, text):
         """
-        Làm sạch văn bản
+        Làm sạch văn bản cơ bản
         """
         if not text:
             return ""
 
-        # Loại bỏ các ký tự đặc biệt không cần thiết nhưng giữ lại dấu chấm câu quan trọng
-        text = re.sub(r"[^\w\s.,;:!?()•\-]", " ", text)
+        # Loại bỏ các ký tự HTML
+        text = re.sub(r"<.*?>", " ", text)
 
-        # Chuẩn hóa xuống dòng
-        text = re.sub(r"\n+", " ", text)
+        # Chuẩn hóa xuống dòng thành khoảng trắng
+        text = re.sub(r"\s*\n\s*", " ", text)
 
-        # Chuẩn hóa dấu chấm câu
+        # Chuẩn hóa dấu chấm câu (thêm khoảng trắng sau dấu chấm nếu chưa có)
         text = re.sub(r"\.(?=[A-Za-z])", ". ", text)
 
         # Loại bỏ khoảng trắng thừa
         text = re.sub(r"\s+", " ", text).strip()
 
-        # Loại bỏ các ký tự đặc biệt ở đầu và cuối
-        text = text.strip(".,;:!?() ")
+        return text
+
+    def advanced_preprocessing(self, text):
+        """
+        Tiền xử lý nâng cao cho văn bản IT
+        """
+        if not text:
+            return ""
+
+        # Chuẩn hóa cơ bản
+        text = self.clean_text(text)
+
+        # Xử lý từ viết tắt IT phổ biến
+        abbreviations = {
+            r"\bjs\b": "javascript",
+            r"\bts\b": "typescript",
+            r"\bpy\b": "python",
+            r"\bml\b": "machine learning",
+            r"\bai\b": "artificial intelligence",
+            r"\boop\b": "object oriented programming",
+            r"\bui\b": "user interface",
+            r"\bux\b": "user experience",
+            r"\bfe\b": "frontend",
+            r"\bbe\b": "backend",
+            r"\bfs\b": "fullstack",
+            r"\bapi\b": "application programming interface",
+            r"\bsql\b": "structured query language",
+            r"\bnosql\b": "non-relational database",
+            r"\bci\b": "continuous integration",
+            r"\bcd\b": "continuous deployment",
+            r"\bdb\b": "database",
+            r"\bide\b": "integrated development environment",
+            r"\boop\b": "object-oriented programming",
+            r"\bfp\b": "functional programming",
+            r"\bqa\b": "quality assurance",
+            r"\bsdk\b": "software development kit",
+            r"\bapi\b": "application programming interface",
+            r"\bros\b": "robot operating system",
+            r"\bos\b": "operating system",
+            r"\bui/ux\b": "user interface and user experience",
+        }
+
+        for abbr, full in abbreviations.items():
+            text = re.sub(abbr, full, text, flags=re.IGNORECASE)
+
+        # Chuẩn hóa tên công nghệ
+        tech_variants = {
+            r"react\.?js": "react",
+            r"node\.?js": "node",
+            r"angular(?:js)?(?:\s*[0-9.]+)?": "angular",
+            r"vue\.?js": "vue",
+            r"express\.?js": "express",
+            r"next\.?js": "nextjs",
+            r"mongo\s*db": "mongodb",
+            r"postgre(?:s|sql)": "postgresql",
+            r"ms\s*sql": "mssql",
+            r"my\s*sql": "mysql",
+            r"type\s*script": "typescript",
+            r"java\s*script": "javascript",
+            r"dotnet": ".net",
+            r"asp\.net(?:\s*core)?": "asp.net",
+            r"laravel\s*[0-9.]*": "laravel",
+            r"spring\s*boot": "spring boot",
+            r"spring\s*framework": "spring",
+            r"django\s*[0-9.]*": "django",
+            r"flask\s*[0-9.]*": "flask",
+            r"ruby\s*on\s*rails": "ruby on rails",
+            r"tensorflow\s*[0-9.]*": "tensorflow",
+            r"pytorch\s*[0-9.]*": "pytorch",
+            r"kubernetes": "k8s",
+            r"docker\s*compose": "docker-compose",
+            r"github\s*actions": "github actions",
+            r"gitlab\s*ci": "gitlab ci",
+            r"jenkins\s*[0-9.]*": "jenkins",
+        }
+
+        for variant, standard in tech_variants.items():
+            text = re.sub(variant, standard, text, flags=re.IGNORECASE)
 
         return text
 

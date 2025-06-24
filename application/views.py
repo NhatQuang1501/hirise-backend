@@ -171,17 +171,37 @@ class JobApplicationDetailView(APIView):
             return application
         except JobApplication.DoesNotExist:
             return None
+        except Exception as e:
+            # Thêm log để debug
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error getting application {pk}: {str(e)}")
+            return None
 
     def get(self, request, pk, format=None):
-        application = self.get_object(pk)
-        if not application:
-            return Response(
-                {"detail": "Application not found or you don't have permission."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        try:
+            application = self.get_object(pk)
+            if not application:
+                return Response(
+                    {"detail": "Application not found or you don't have permission."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
 
-        serializer = JobApplicationSerializer(application, context={"request": request})
-        return Response(serializer.data, status=status.HTTP_200_OK)
+            serializer = JobApplicationSerializer(
+                application, context={"request": request}
+            )
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            # Thêm xử lý ngoại lệ để tránh lỗi 500
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in JobApplicationDetailView.get: {str(e)}")
+            return Response(
+                {"detail": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     def delete(self, request, pk, format=None):
         application = self.get_object(pk)
