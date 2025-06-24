@@ -39,10 +39,11 @@ jobs:
           git pull
           source env/bin/activate
           pip install -r requirements.txt
-          sudo systemctl stop celery.service
-          sudo systemctl stop gunicorn
+
           python manage.py migrate
           python manage.py collectstatic --noinput
-          sudo systemctl start gunicorn
-          sudo systemctl start celery.service
+
+          # Khởi động lại
+          sudo systemctl restart gunicorn
+          sudo systemctl restart celery.service
           sudo systemctl reload nginx
