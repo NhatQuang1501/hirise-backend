@@ -27,12 +27,20 @@ class JobProcessor:
         try:
             self.model = SentenceTransformer(model_name)
         except Exception as e:
-            logger.error(f"Lỗi khi khởi tạo SBERT model: {e}")
+            logger.error(f"Error initializing SBERT model: {e}")
             self.model = None
+
+        # Tải danh sách kỹ năng IT
+        try:
+            with open(os.path.join(settings.BASE_DIR, "AI", "it_skills.txt"), "r") as f:
+                self.it_skills = [line.strip().lower() for line in f.readlines()]
+        except Exception as e:
+            logger.error(f"Error loading IT skills list: {e}")
+            self.it_skills = []
 
     def clean_text(self, text):
         """
-        Làm sạch văn bản
+        Làm sạch văn bản cơ bản
         """
         if not text:
             return ""
@@ -51,57 +59,302 @@ class JobProcessor:
 
         return text
 
-    def enhance_semantic_structure(self, text, section_name=""):
+    def advanced_preprocessing(self, text):
         """
-        Tăng cường cấu trúc ngữ nghĩa của văn bản
+        Tiền xử lý nâng cao cho văn bản IT
         """
         if not text:
             return ""
 
-        # Tách thành các điểm bullets nếu có
-        if "•" in text or "*" in text or "-" in text:
-            # Chuẩn hóa các ký tự bullet
-            text = re.sub(r"(?:^|\n)[\s]*[•\*\-][\s]+", "\n• ", text)
+        # Chuẩn hóa cơ bản
+        text = self.clean_text(text)
 
-            # Tách thành danh sách các điểm
-            bullet_points = re.split(r"\n•\s+", text)
-            bullet_points = [point.strip() for point in bullet_points if point.strip()]
+        # Xử lý từ viết tắt IT phổ biến
+        abbreviations = {
+            r"\bjs\b": "javascript",
+            r"\bts\b": "typescript",
+            r"\bpy\b": "python",
+            r"\bml\b": "machine learning",
+            r"\bai\b": "artificial intelligence",
+            r"\boop\b": "object oriented programming",
+            r"\bui\b": "user interface",
+            r"\bux\b": "user experience",
+            r"\bfe\b": "frontend",
+            r"\bbe\b": "backend",
+            r"\bfs\b": "fullstack",
+            r"\bapi\b": "application programming interface",
+            r"\bsql\b": "structured query language",
+            r"\bnosql\b": "non-relational database",
+            r"\bci\b": "continuous integration",
+            r"\bcd\b": "continuous deployment",
+            r"\bdb\b": "database",
+            r"\bide\b": "integrated development environment",
+            r"\boop\b": "object-oriented programming",
+            r"\bfp\b": "functional programming",
+            r"\bqa\b": "quality assurance",
+            r"\bsdk\b": "software development kit",
+            r"\bapi\b": "application programming interface",
+            r"\bros\b": "robot operating system",
+            r"\bos\b": "operating system",
+            r"\bui/ux\b": "user interface and user experience",
+        }
 
-            # Thêm ngữ cảnh từ tên section
-            if section_name:
-                context_prefix = f"{section_name}: "
-                enhanced_points = []
-                for point in bullet_points:
-                    if not re.match(r"^[A-Z]", point):  # Nếu không bắt đầu bằng chữ hoa
-                        point = point[0].upper() + point[1:] if point else ""
-                    enhanced_points.append(f"{context_prefix}{point}")
-                return " ".join(enhanced_points)
-            else:
-                return " ".join(bullet_points)
+        for abbr, full in abbreviations.items():
+            text = re.sub(abbr, full, text, flags=re.IGNORECASE)
 
-        # Nếu không có bullet, thêm ngữ cảnh từ tên section
-        if section_name and not text.lower().startswith(section_name.lower()):
-            return f"{section_name}: {text}"
+        # Chuẩn hóa tên công nghệ
+        tech_variants = {
+            r"react\.?js": "react",
+            r"node\.?js": "node",
+            r"angular(?:js)?(?:\s*[0-9.]+)?": "angular",
+            r"vue\.?js": "vue",
+            r"express\.?js": "express",
+            r"next\.?js": "nextjs",
+            r"mongo\s*db": "mongodb",
+            r"postgre(?:s|sql)": "postgresql",
+            r"ms\s*sql": "mssql",
+            r"my\s*sql": "mysql",
+            r"type\s*script": "typescript",
+            r"java\s*script": "javascript",
+            r"dotnet": ".net",
+            r"asp\.net(?:\s*core)?": "asp.net",
+            r"laravel\s*[0-9.]*": "laravel",
+            r"spring\s*boot": "spring boot",
+            r"spring\s*framework": "spring",
+            r"django\s*[0-9.]*": "django",
+            r"flask\s*[0-9.]*": "flask",
+            r"ruby\s*on\s*rails": "ruby on rails",
+            r"tensorflow\s*[0-9.]*": "tensorflow",
+            r"pytorch\s*[0-9.]*": "pytorch",
+            r"kubernetes": "k8s",
+            r"docker\s*compose": "docker-compose",
+            r"github\s*actions": "github actions",
+            r"gitlab\s*ci": "gitlab ci",
+            r"jenkins\s*[0-9.]*": "jenkins",
+        }
+
+        for variant, standard in tech_variants.items():
+            text = re.sub(variant, standard, text, flags=re.IGNORECASE)
 
         return text
 
+    def enhance_semantic_structure(self, text, section_title):
+        """
+        Tăng cường cấu trúc ngữ nghĩa cho văn bản
+        """
+        if not text:
+            return ""
+
+        # Tiền xử lý nâng cao
+        text = self.advanced_preprocessing(text)
+
+        # Tách các điểm trong danh sách
+        items = re.split(r"(?:\r?\n)|(?:•|\*|\-|\d+\.)\s*", text)
+        items = [item.strip() for item in items if item.strip()]
+
+        # Định dạng lại với cấu trúc rõ ràng
+        formatted_text = f"{section_title}:\n"
+        for i, item in enumerate(items, 1):
+            formatted_text += f"• {item}\n"
+
+        return formatted_text
+
     def extract_skills_from_text(self, text, skill_tags=None):
         """
-        Trích xuất kỹ năng từ văn bản
+        Trích xuất kỹ năng từ văn bản với cải tiến
         """
         if not text:
             return []
 
-        # Nếu có danh sách skill_tags, sử dụng để tìm kiếm trong văn bản
+        # Áp dụng tiền xử lý nâng cao
+        text = self.advanced_preprocessing(text.lower())
+
         extracted_skills = []
+
+        # Tìm kiếm từ danh sách skill_tags (từ database)
         if skill_tags:
             for skill in skill_tags:
-                if re.search(
-                    r"\b" + re.escape(skill.name.lower()) + r"\b", text.lower()
-                ):
+                if re.search(r"\b" + re.escape(skill.name.lower()) + r"\b", text):
                     extracted_skills.append(skill.name)
 
-        return extracted_skills
+        # Tìm kiếm từ danh sách kỹ năng IT
+        for skill in self.it_skills:
+            if skill not in [s.lower() for s in extracted_skills] and re.search(
+                r"\b" + re.escape(skill) + r"\b", text
+            ):
+                extracted_skills.append(skill)
+
+        # Trích xuất kỹ năng với mức độ yêu cầu
+        skill_levels = self.extract_skill_levels(text)
+
+        # Kết hợp kết quả
+        final_skills = []
+        for skill in extracted_skills:
+            if skill.lower() in skill_levels:
+                final_skills.append(f"{skill} ({skill_levels[skill.lower()]})")
+            else:
+                final_skills.append(skill)
+
+        return final_skills
+
+    def extract_skill_levels(self, text):
+        """
+        Trích xuất kỹ năng cùng với mức độ yêu cầu
+        """
+        skill_levels = {}
+
+        # Các mẫu để trích xuất kỹ năng với mức độ
+        patterns = [
+            # Pattern: "advanced knowledge of Python"
+            (
+                r"(beginner|basic|intermediate|advanced|expert|proficient|strong)\s+(knowledge|skills|experience|understanding|proficiency)\s+(?:of|in|with)\s+([a-zA-Z0-9\s\.\+\#]+)",
+                lambda m: (m.group(3).strip().lower(), m.group(1).lower()),
+            ),
+            # Pattern: "Python (advanced level)"
+            (
+                r"([a-zA-Z0-9\s\.\+\#]+)\s*\(\s*(beginner|basic|intermediate|advanced|expert|proficient|strong)\s*(?:level|knowledge|skills|experience)?\s*\)",
+                lambda m: (m.group(1).strip().lower(), m.group(2).lower()),
+            ),
+            # Pattern: "Python - advanced"
+            (
+                r"([a-zA-Z0-9\s\.\+\#]+)\s*[\-\:]\s*(beginner|basic|intermediate|advanced|expert|proficient|strong)",
+                lambda m: (m.group(1).strip().lower(), m.group(2).lower()),
+            ),
+        ]
+
+        for pattern, extract_func in patterns:
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                skill, level = extract_func(match)
+                # Chuẩn hóa mức độ
+                if level in ["proficient", "strong"]:
+                    level = "advanced"
+                elif level == "basic":
+                    level = "beginner"
+
+                # Kiểm tra xem có phải kỹ năng IT không
+                for it_skill in self.it_skills:
+                    if it_skill in skill:
+                        skill_levels[it_skill] = level
+                        break
+
+        return skill_levels
+
+    def extract_experience_requirements(self, text):
+        """
+        Trích xuất yêu cầu kinh nghiệm từ văn bản job
+        """
+        experience_reqs = {}
+
+        # Mẫu regex để tìm yêu cầu kinh nghiệm
+        patterns = [
+            r"(\d+)[\+]?\s*(?:years|yrs)(?:\s*of)?\s*(?:experience|exp)(?:\s*in|\s*with)?\s*([a-zA-Z0-9\s\.\+\#]+)",
+            r"experience(?:\s*of|\s*in|\s*with)?\s*([a-zA-Z0-9\s\.\+\#]+)(?:\s*for)?\s*(\d+)[\+]?\s*(?:years|yrs)",
+        ]
+
+        for pattern in patterns:
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                if pattern.startswith(r"(\d+)"):
+                    years = int(match.group(1))
+                    tech = match.group(2).strip().lower()
+                else:
+                    tech = match.group(1).strip().lower()
+                    years = int(match.group(2))
+
+                # Chuẩn hóa tên công nghệ
+                tech = self.normalize_technology_name(tech)
+
+                # Lưu yêu cầu cao nhất nếu có nhiều yêu cầu cho cùng một công nghệ
+                experience_reqs[tech] = max(experience_reqs.get(tech, 0), years)
+
+        return experience_reqs
+
+    def normalize_technology_name(self, tech_name):
+        """
+        Chuẩn hóa tên công nghệ
+        """
+        # Ánh xạ các biến thể tên công nghệ về dạng chuẩn
+        tech_mapping = {
+            "javascript": "javascript",
+            "js": "javascript",
+            "typescript": "typescript",
+            "ts": "typescript",
+            "react": "react",
+            "reactjs": "react",
+            "react.js": "react",
+            "node": "node.js",
+            "nodejs": "node.js",
+            "node.js": "node.js",
+            "angular": "angular",
+            "angularjs": "angular",
+            "vue": "vue.js",
+            "vuejs": "vue.js",
+            "vue.js": "vue.js",
+            "python": "python",
+            "django": "django",
+            "flask": "flask",
+            "java": "java",
+            "spring": "spring",
+            "spring boot": "spring boot",
+            "c#": "c#",
+            ".net": ".net",
+            "dotnet": ".net",
+            "asp.net": "asp.net",
+            "php": "php",
+            "laravel": "laravel",
+            "ruby": "ruby",
+            "ruby on rails": "ruby on rails",
+            "rails": "ruby on rails",
+            "go": "golang",
+            "golang": "golang",
+            "rust": "rust",
+            "swift": "swift",
+            "kotlin": "kotlin",
+            "flutter": "flutter",
+            "dart": "dart",
+            "react native": "react native",
+            "sql": "sql",
+            "mysql": "mysql",
+            "postgresql": "postgresql",
+            "postgres": "postgresql",
+            "mongodb": "mongodb",
+            "mongo": "mongodb",
+            "redis": "redis",
+            "docker": "docker",
+            "kubernetes": "kubernetes",
+            "k8s": "kubernetes",
+            "aws": "aws",
+            "azure": "azure",
+            "gcp": "gcp",
+            "google cloud": "gcp",
+            "devops": "devops",
+            "ci/cd": "ci/cd",
+            "git": "git",
+            "github": "github",
+            "gitlab": "gitlab",
+            "jenkins": "jenkins",
+            "jira": "jira",
+            "agile": "agile",
+            "scrum": "scrum",
+            "machine learning": "machine learning",
+            "ml": "machine learning",
+            "artificial intelligence": "artificial intelligence",
+            "ai": "artificial intelligence",
+            "data science": "data science",
+            "tensorflow": "tensorflow",
+            "pytorch": "pytorch",
+        }
+
+        # Chuẩn hóa tên
+        normalized = tech_name.lower().strip()
+
+        # Áp dụng ánh xạ nếu có
+        for key, value in tech_mapping.items():
+            if key in normalized:
+                return value
+
+        return normalized
 
     def process_job(self, job):
         """
@@ -113,17 +366,15 @@ class JobProcessor:
             description = job.description
             responsibilities = job.responsibilities
             requirements = job.requirements
-            preferred_skills = (
-                job.preferred_skills
-            )  # Lấy preferred_skills trực tiếp từ model
+            preferred_skills = job.preferred_skills
             experience_level = job.experience_level
 
-            # Làm sạch văn bản
-            clean_title = self.clean_text(title)
-            clean_description = self.clean_text(description)
-            clean_requirements = self.clean_text(requirements)
-            clean_preferred_skills = self.clean_text(preferred_skills)
-            clean_responsibilities = self.clean_text(responsibilities)
+            # Áp dụng tiền xử lý nâng cao
+            clean_title = self.advanced_preprocessing(title)
+            clean_description = self.advanced_preprocessing(description)
+            clean_requirements = self.advanced_preprocessing(requirements)
+            clean_preferred_skills = self.advanced_preprocessing(preferred_skills)
+            clean_responsibilities = self.advanced_preprocessing(responsibilities)
 
             # Tăng cường ngữ nghĩa
             enhanced_responsibilities = self.enhance_semantic_structure(
@@ -144,10 +395,15 @@ class JobProcessor:
             skill_tags = job.skills.all()
             skill_names = [skill.name for skill in skill_tags]
 
-            # Trích xuất thêm kỹ năng từ văn bản nếu cần
+            # Trích xuất thêm kỹ năng từ văn bản
             extracted_skills = self.extract_skills_from_text(
                 f"{description} {responsibilities} {requirements} {preferred_skills}",
                 skill_tags,
+            )
+
+            # Trích xuất yêu cầu kinh nghiệm
+            experience_requirements = self.extract_experience_requirements(
+                f"{requirements} {preferred_skills}"
             )
 
             # Kết hợp các kỹ năng và loại bỏ trùng lặp
@@ -182,6 +438,7 @@ class JobProcessor:
                     "preferred_skills": clean_preferred_skills,
                     "responsibilities": clean_responsibilities,
                     "combined_text": combined_text,
+                    "experience_requirements": experience_requirements,
                 },
             )
 
@@ -214,7 +471,7 @@ class JobProcessor:
             return job_data
 
         except Exception as e:
-            logger.error(f"Lỗi khi xử lý job {job.id}: {e}")
+            logger.error(f"Error processing job {job.id}: {e}")
             logger.error(traceback.format_exc())
             return None
 

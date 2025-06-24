@@ -3,6 +3,10 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.http import Http404
+from celery.result import AsyncResult
+
+from application.models import JobApplication
+from users.choices import ApplicationStatus
 from .models import JobProcessedData, CVProcessedData, JobCVMatch
 from .serializers import (
     JobProcessedDataSerializer,
@@ -191,8 +195,13 @@ class MatchJobWithCVView(APIView):
         try:
             # Lấy đối tượng application
             from application.models import JobApplication
+            from jobs.models import Job
 
             try:
+                # Kiểm tra job tồn tại và thuộc về công ty hiện tại
+                job = Job.objects.get(id=job_id)
+                self.check_object_permissions(request, job)
+
                 application = JobApplication.objects.get(
                     id=application_id, job_id=job_id
                 )
@@ -208,23 +217,90 @@ class MatchJobWithCVView(APIView):
                 return Response(
                     {"error": "Application not found"}, status=status.HTTP_404_NOT_FOUND
                 )
+            except Job.DoesNotExist:
+                return Response(
+                    {"error": "Job not found"}, status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Kiểm tra CV đã được xử lý chưa
+            try:
+                cv_processed_data = CVProcessedData.objects.get(application=application)
+            except CVProcessedData.DoesNotExist:
+                # Nếu CV chưa được xử lý, thực hiện xử lý bất đồng bộ và trả về thông báo
+                from .tasks import process_cv_task
+
+                process_cv_task.delay(str(application_id))
+
+                return Response(
+                    {
+                        "detail": "CV processing has been started. Please try again in a few moments."
+                    },
+                    status=status.HTTP_202_ACCEPTED,
+                )
+
+            # Thực hiện đánh giá độ phù hợp đồng bộ
+            from .matching_service import MatchingService
 
             matching_service = MatchingService()
-            result = matching_service.match_job_cv(
-                job_id, application_id=application_id
+            match_result = matching_service.match_job_cv(
+                str(job_id), application_id=str(application_id)
             )
 
-            if result:
-                serializer = JobCVMatchSerializer(result)
-                return Response(serializer.data, status=status.HTTP_200_OK)
+            if match_result:
+                serializer = JobCVMatchSerializer(match_result)
+                return Response(
+                    {
+                        "detail": "Match analysis completed successfully.",
+                        "match_data": serializer.data,
+                    },
+                    status=status.HTTP_200_OK,
+                )
             else:
                 return Response(
-                    {"error": "Cannot evaluate match"},
-                    status=status.HTTP_400_BAD_REQUEST,
+                    {"error": "Failed to analyze match. Please try again."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
+
         except Exception as e:
             return Response(
                 {"error": f"Error evaluating match: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def get(self, request, job_id, application_id, format=None):
+        """
+        Lấy kết quả đánh giá sự phù hợp giữa job và CV
+        """
+        try:
+            # Kiểm tra quyền truy cập
+            from jobs.models import Job
+
+            try:
+                job = Job.objects.get(id=job_id)
+                self.check_object_permissions(request, job)
+            except Job.DoesNotExist:
+                return Response(
+                    {"error": "Job not found"}, status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Lấy kết quả đánh giá
+            try:
+                match = JobCVMatch.objects.get(
+                    job_id=job_id, application_id=application_id
+                )
+                serializer = JobCVMatchSerializer(match)
+                return Response(serializer.data)
+            except JobCVMatch.DoesNotExist:
+                return Response(
+                    {
+                        "detail": "Match analysis not found. You may need to run the analysis first."
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        except Exception as e:
+            return Response(
+                {"error": f"Error getting match results: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -241,6 +317,17 @@ class MatchJobWithAllCVsView(APIView):
         Đánh giá sự phù hợp giữa job và tất cả CV đã apply
         """
         try:
+            # Kiểm tra job tồn tại và thuộc về công ty hiện tại
+            from jobs.models import Job
+
+            try:
+                job = Job.objects.get(id=job_id)
+                self.check_object_permissions(request, job)
+            except Job.DoesNotExist:
+                return Response(
+                    {"error": "Job not found"}, status=status.HTTP_404_NOT_FOUND
+                )
+
             # Cập nhật trạng thái của tất cả application đang ở trạng thái pending
             from application.models import JobApplication
             from users.choices import ApplicationStatus
@@ -253,11 +340,72 @@ class MatchJobWithAllCVsView(APIView):
             if pending_applications.exists():
                 pending_applications.update(status=ApplicationStatus.REVIEWING)
 
-            matching_service = MatchingService()
-            results = matching_service.match_job_with_all_applications(job_id)
+            # Lấy danh sách các application cần đánh giá
+            applications = JobApplication.objects.filter(job_id=job_id)
 
+            if not applications.exists():
+                return Response(
+                    {"detail": "No applications found for this job."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Xử lý CV bất đồng bộ nếu cần
+            from .tasks import process_cv_task
+
+            applications_need_processing = []
+            for application in applications:
+                # Kiểm tra CV đã được xử lý chưa
+                try:
+                    CVProcessedData.objects.get(application=application)
+                except CVProcessedData.DoesNotExist:
+                    # Nếu CV chưa được xử lý, thêm vào danh sách cần xử lý
+                    applications_need_processing.append(application)
+
+            # Nếu có application cần xử lý CV, gửi task và trả về thông báo
+            if applications_need_processing:
+                for app in applications_need_processing:
+                    process_cv_task.delay(str(app.id))
+
+                return Response(
+                    {
+                        "status": "processing",
+                        "detail": f"CV processing started for {len(applications_need_processing)} applications. Please try again in a few moments.",
+                        "total_applications": len(applications),
+                        "applications_need_processing": len(
+                            applications_need_processing
+                        ),
+                    },
+                    status=status.HTTP_202_ACCEPTED,
+                )
+
+            # Nếu tất cả CV đã được xử lý, thực hiện đánh giá đồng bộ
+            from .matching_service import MatchingService
+
+            matching_service = MatchingService()
+            results = []
+
+            for application in applications:
+                # Thực hiện đánh giá độ phù hợp đồng bộ
+                match_result = matching_service.match_job_cv(
+                    str(job_id), application_id=str(application.id)
+                )
+                if match_result:
+                    results.append(match_result)
+
+            # Lấy kết quả đánh giá
             serializer = JobCVMatchSerializer(results, many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+
+            return Response(
+                {
+                    "status": "completed",
+                    "detail": f"Match analysis completed for {len(applications)} applications.",
+                    "results": serializer.data,
+                    "total_applications": len(applications),
+                    "processed_applications": len(results),
+                },
+                status=status.HTTP_200_OK,
+            )
+
         except Exception as e:
             return Response(
                 {"error": f"Error evaluating match: {str(e)}"},
@@ -277,6 +425,17 @@ class GetJobMatchResultsView(APIView):
         Lấy kết quả đánh giá sự phù hợp của job với tất cả CV
         """
         try:
+            # Kiểm tra job tồn tại và thuộc về công ty hiện tại
+            from jobs.models import Job
+
+            try:
+                job = Job.objects.get(id=job_id)
+                self.check_object_permissions(request, job)
+            except Job.DoesNotExist:
+                return Response(
+                    {"error": "Job not found"}, status=status.HTTP_404_NOT_FOUND
+                )
+
             matches = JobCVMatch.objects.filter(job_id=job_id).select_related(
                 "job", "application__applicant__user"
             )
@@ -284,10 +443,45 @@ class GetJobMatchResultsView(APIView):
             # Sắp xếp theo điểm từ cao đến thấp
             matches = matches.order_by("-match_score")
 
+            # Thêm thông tin về số lượng applications đã được đánh giá
+            from application.models import JobApplication
+
+            total_applications = JobApplication.objects.filter(job_id=job_id).count()
+            processed_applications = matches.count()
+
             serializer = JobCVMatchSerializer(matches, many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(
+                {
+                    "total_applications": total_applications,
+                    "processed_applications": processed_applications,
+                    "results": serializer.data,
+                },
+                status=status.HTTP_200_OK,
+            )
+
         except Exception as e:
             return Response(
                 {"error": f"Error getting match results: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class TaskStatusView(APIView):
+    """
+    API view để kiểm tra trạng thái của task
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, task_id, format=None):
+        """
+        Kiểm tra trạng thái của task
+        """
+        task_result = AsyncResult(task_id)
+        return Response(
+            {
+                "task_id": task_id,
+                "status": task_result.status,
+                "result": task_result.result if task_result.ready() else None,
+            }
+        )

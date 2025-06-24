@@ -26,20 +26,245 @@ class MatchingService:
         self.JOB_DATA_DIR = os.path.join(settings.BASE_DIR, "AI", "job_processed_data")
         self.CV_DATA_DIR = os.path.join(settings.BASE_DIR, "AI", "cv_processed_data")
 
-        # Định nghĩa các trọng số cho từng phần
+        # Tải danh sách kỹ năng IT
+        try:
+            with open(os.path.join(settings.BASE_DIR, "AI", "it_skills.txt"), "r") as f:
+                self.it_skills = [line.strip().lower() for line in f.readlines()]
+        except Exception as e:
+            logger.error(f"Error loading IT skills list: {e}")
+            self.it_skills = []
+
+        # Thêm các thuộc tính thiếu
+        self.exact_match_weight = 0.3  # Trọng số cho việc khớp chính xác kỹ năng
         self.section_weights = {
-            # Trọng số cho việc so khớp giữa các phần
-            "job_requirements_cv_skills": 0.25,  # Yêu cầu công việc và kỹ năng CV
-            "job_requirements_cv_experience": 0.2,  # Yêu cầu công việc và kinh nghiệm CV
-            "job_skills_cv_skills": 0.15,  # Kỹ năng công việc và kỹ năng CV
-            "job_responsibilities_cv_experience": 0.15,  # Trách nhiệm công việc và kinh nghiệm CV
-            "job_title_cv_summary": 0.1,  # Tiêu đề công việc và tóm tắt CV
-            "job_preferred_cv_skills": 0.1,  # Kỹ năng ưu tiên và kỹ năng CV
-            "combined_text": 0.05,  # Toàn bộ văn bản kết hợp
+            "job_requirements_cv_skills": 0.25,
+            "job_requirements_cv_experience": 0.15,
+            "job_skills_cv_skills": 0.20,
+            "job_responsibilities_cv_experience": 0.15,
+            "job_title_cv_summary": 0.10,
+            "job_preferred_cv_skills": 0.10,
+            "combined_text": 0.05,
         }
 
-        # Trọng số cho các kỹ năng khớp chính xác (exact match)
-        self.exact_match_weight = 0.3  # 30% từ exact match, 70% từ semantic match
+    def calculate_dynamic_weights(self, job_data, cv_data):
+        """
+        Tính toán trọng số động dựa trên đặc điểm dữ liệu
+        """
+        weights = {
+            "job_requirements_cv_skills": 0.25,  # Trọng số mặc định
+            "job_responsibilities_cv_experience": 0.20,
+            "job_skills_cv_skills": 0.15,
+            "job_title_cv_summary": 0.10,
+            "job_preferred_cv_skills": 0.10,
+            "combined_text": 0.05,
+            "context_match": 0.15,  # Trọng số cho context-aware matching
+        }
+
+        # Điều chỉnh dựa trên độ chi tiết của job requirements
+        if (
+            job_data.basic_requirements
+            and len(job_data.basic_requirements.split()) > 100
+        ):
+            # Job có yêu cầu chi tiết, tăng trọng số cho phần này
+            weights["job_requirements_cv_skills"] += 0.05
+            weights["combined_text"] -= 0.05
+
+        # Điều chỉnh dựa trên số lượng kỹ năng trong CV
+        if (
+            hasattr(cv_data, "extracted_skills")
+            and cv_data.extracted_skills
+            and len(cv_data.extracted_skills) > 10
+        ):
+            # CV có nhiều kỹ năng, tăng trọng số cho phần này
+            weights["job_skills_cv_skills"] += 0.05
+            weights["job_title_cv_summary"] -= 0.05
+
+        # Điều chỉnh dựa trên độ chi tiết của kinh nghiệm trong CV
+        if cv_data.experience and len(cv_data.experience.split()) > 200:
+            # CV có kinh nghiệm chi tiết, tăng trọng số cho phần này
+            weights["job_responsibilities_cv_experience"] += 0.05
+            weights["job_preferred_cv_skills"] -= 0.05
+
+        # Điều chỉnh dựa trên sự có mặt của yêu cầu kinh nghiệm cụ thể
+        if (
+            hasattr(job_data, "experience_requirements")
+            and job_data.experience_requirements
+        ):
+            # Job có yêu cầu kinh nghiệm cụ thể, tăng trọng số cho context matching
+            weights["context_match"] += 0.05
+            weights["combined_text"] -= 0.05
+
+        # Chuẩn hóa trọng số để tổng = 1
+        total = sum(weights.values())
+        return {k: v / total for k, v in weights.items()}
+
+    def match_with_context(self, job_data, cv_data):
+        """
+        Thực hiện so khớp có nhận thức ngữ cảnh
+        """
+        context_scores = {}
+
+        # 1. So khớp yêu cầu kinh nghiệm với kinh nghiệm ứng viên
+        if (
+            hasattr(job_data, "experience_requirements")
+            and job_data.experience_requirements
+        ):
+            experience_requirements = job_data.experience_requirements
+            candidate_experience = (
+                cv_data.experience_details
+                if hasattr(cv_data, "experience_details") and cv_data.experience_details
+                else {}
+            )
+
+            for tech, required_years in experience_requirements.items():
+                if tech in candidate_experience:
+                    candidate_years = candidate_experience[tech]
+                    # Tính điểm dựa trên tỷ lệ kinh nghiệm thực tế/yêu cầu
+                    ratio = min(candidate_years / required_years, 1.5)  # Cap ở 150%
+                    context_scores[f"experience_{tech}"] = ratio
+                else:
+                    context_scores[f"experience_{tech}"] = 0
+
+        # 2. So khớp kỹ năng với mức độ ưu tiên
+        # Xác định kỹ năng quan trọng từ job requirements
+        important_skills = []
+        if job_data.skills:
+            important_skills = job_data.skills
+
+        extracted_skills = []
+        if hasattr(cv_data, "extracted_skills") and cv_data.extracted_skills:
+            extracted_skills = [
+                skill.split(" (")[0].lower() if " (" in skill else skill.lower()
+                for skill in cv_data.extracted_skills
+            ]
+
+        for skill in important_skills:
+            skill_lower = skill.lower()
+            if skill_lower in extracted_skills:
+                context_scores[f"skill_{skill_lower}"] = 1.0
+            else:
+                # Tìm kỹ năng tương tự
+                for cv_skill in extracted_skills:
+                    if skill_lower in cv_skill or cv_skill in skill_lower:
+                        context_scores[f"skill_{skill_lower}"] = 0.7
+                        break
+                else:
+                    context_scores[f"skill_{skill_lower}"] = 0
+
+        # 3. Tính điểm trung bình có trọng số
+        if context_scores:
+            # Trọng số cao hơn cho các kỹ năng/kinh nghiệm quan trọng
+            weighted_score = 0
+            total_weight = 0
+
+            for item, score in context_scores.items():
+                if item.startswith("experience_"):
+                    weight = 2.0  # Trọng số cao cho kinh nghiệm
+                else:
+                    weight = 1.0  # Trọng số chuẩn cho kỹ năng
+
+                weighted_score += score * weight
+                total_weight += weight
+
+            return weighted_score / total_weight if total_weight > 0 else 0
+        else:
+            return 0
+
+    def generate_match_explanation(self, job_data, cv_data, match_scores):
+        """
+        Tạo giải thích chi tiết về kết quả đánh giá
+        """
+        # Xác định điểm mạnh (kỹ năng khớp với yêu cầu)
+        strengths = []
+
+        # Xác định kỹ năng từ job và CV
+        job_skills = job_data.skills if job_data.skills else []
+        cv_skills = []
+        if hasattr(cv_data, "extracted_skills") and cv_data.extracted_skills:
+            cv_skills = [
+                skill.split(" (")[0].lower() if " (" in skill else skill.lower()
+                for skill in cv_data.extracted_skills
+            ]
+
+        # Tìm các kỹ năng khớp
+        for skill in job_skills:
+            skill_lower = skill.lower()
+            if any(
+                skill_lower in cv_skill or cv_skill in skill_lower
+                for cv_skill in cv_skills
+            ):
+                strengths.append(f"Candidate has experience with {skill}")
+
+        # Kiểm tra kinh nghiệm
+        if (
+            hasattr(job_data, "experience_requirements")
+            and job_data.experience_requirements
+        ):
+            experience_reqs = job_data.experience_requirements
+            candidate_exp = (
+                cv_data.experience_details
+                if hasattr(cv_data, "experience_details") and cv_data.experience_details
+                else {}
+            )
+
+            for tech, required_years in experience_reqs.items():
+                if tech in candidate_exp:
+                    if candidate_exp[tech] >= required_years:
+                        strengths.append(
+                            f"Candidate has {candidate_exp[tech]} years of experience with {tech} (required: {required_years})"
+                        )
+
+        # Xác định điểm yếu (kỹ năng thiếu)
+        weaknesses = []
+
+        # Tìm các kỹ năng thiếu
+        for skill in job_skills:
+            skill_lower = skill.lower()
+            if not any(
+                skill_lower in cv_skill or cv_skill in skill_lower
+                for cv_skill in cv_skills
+            ):
+                weaknesses.append(f"Job requires {skill} which was not found in the CV")
+
+        # Kiểm tra kinh nghiệm thiếu
+        if (
+            hasattr(job_data, "experience_requirements")
+            and job_data.experience_requirements
+        ):
+            experience_reqs = job_data.experience_requirements
+            candidate_exp = (
+                cv_data.experience_details
+                if hasattr(cv_data, "experience_details") and cv_data.experience_details
+                else {}
+            )
+
+            for tech, required_years in experience_reqs.items():
+                if tech not in candidate_exp:
+                    weaknesses.append(
+                        f"Job requires {required_years} years of experience with {tech}"
+                    )
+                elif candidate_exp[tech] < required_years:
+                    weaknesses.append(
+                        f"Job requires {required_years} years of experience with {tech}, but candidate has only {candidate_exp[tech]} years"
+                    )
+
+        # Tạo giải thích tổng quan
+        explanation = {
+            "overall": f"The candidate's profile matches {int(match_scores.get('match_score', 0) * 100)}% of the job requirements.",
+            "top_strengths": (
+                strengths[:5] if strengths else ["No specific strengths identified"]
+            ),
+            "key_gaps": (
+                weaknesses[:5] if weaknesses else ["No specific gaps identified"]
+            ),
+            "note": "This analysis is based on automated text processing and should be verified during interviews.",
+        }
+
+        return {
+            "strengths": strengths,
+            "weaknesses": weaknesses,
+            "explanation": explanation,
+        }
 
     def load_embedding(self, file_path):
         """
@@ -216,90 +441,190 @@ class MatchingService:
         # Chuyển về thang điểm 0-100
         return weighted_score * 100
 
-    def match_job_cv(self, job_id, cv_id=None, application_id=None):
+    def match_job_cv(self, job_id, application_id=None, cv_id=None):
         """
-        So khớp một job với một CV cụ thể
+        So khớp job và CV, trả về điểm số và phân tích
         """
         try:
-            job_data = JobProcessedData.objects.get(job_id=job_id)
+            from jobs.models import Job
+            from application.models import JobApplication
 
-            if cv_id:
-                cv_data = CVProcessedData.objects.get(id=cv_id)
-            elif application_id:
-                cv_data = CVProcessedData.objects.get(application_id=application_id)
-            else:
+            # Log để debug
+            logger.info(
+                f"Starting match_job_cv for job_id: {job_id}, application_id: {application_id}"
+            )
+
+            # Lấy job data
+            try:
+                job = Job.objects.get(id=job_id)
+                job_data = JobProcessedData.objects.get(job=job)
+                logger.info(f"Found job data for job_id: {job_id}")
+            except (Job.DoesNotExist, JobProcessedData.DoesNotExist) as e:
+                logger.error(
+                    f"Job or job processed data not found for job_id: {job_id}. Error: {e}"
+                )
                 return None
 
-            # Tính toán điểm chi tiết
-            detailed_scores = self.compute_detailed_matching_scores(job_data, cv_data)
+            # Lấy CV data
+            cv_data = None
+            if application_id:
+                try:
+                    application = JobApplication.objects.get(id=application_id)
+                    cv_data = CVProcessedData.objects.get(application=application)
+                    logger.info(f"Found CV data for application_id: {application_id}")
+                except (JobApplication.DoesNotExist, CVProcessedData.DoesNotExist) as e:
+                    logger.error(
+                        f"Application or CV processed data not found for application_id: {application_id}. Error: {e}"
+                    )
+                    return None
 
-            # Tính điểm tổng hợp
-            weighted_score = self.compute_weighted_score(detailed_scores)
+            if not cv_data:
+                logger.error("No CV data available for matching")
+                return None
 
-            # Lưu kết quả vào cơ sở dữ liệu
-            match, created = JobCVMatch.objects.update_or_create(
-                job=job_data.job,
-                application=cv_data.application,
+            # Kiểm tra model đã được khởi tạo
+            if self.model is None:
+                logger.error("SentenceTransformer model is not initialized")
+                return None
+
+            # Tính toán trọng số động
+            weights = self.calculate_dynamic_weights(job_data, cv_data)
+
+            # Tính điểm khớp ngữ nghĩa cho từng phần
+            semantic_scores = {}
+
+            # So khớp job requirements với CV skills
+            if job_data.basic_requirements and cv_data.skills:
+                semantic_scores["job_requirements_cv_skills"] = self.compute_similarity(
+                    job_data.basic_requirements, cv_data.skills
+                )
+
+            # So khớp job responsibilities với CV experience
+            if job_data.responsibilities and cv_data.experience:
+                semantic_scores["job_responsibilities_cv_experience"] = (
+                    self.compute_similarity(
+                        job_data.responsibilities, cv_data.experience
+                    )
+                )
+
+            # So khớp job skills với CV skills
+            if job_data.skills and cv_data.skills:
+                semantic_scores["job_skills_cv_skills"] = self.compute_similarity(
+                    ", ".join(job_data.skills), cv_data.skills
+                )
+
+            # So khớp job title với CV summary
+            if job_data.title and cv_data.summary:
+                semantic_scores["job_title_cv_summary"] = self.compute_similarity(
+                    job_data.title, cv_data.summary
+                )
+
+            # So khớp job preferred skills với CV skills
+            if job_data.preferred_skills and cv_data.skills:
+                semantic_scores["job_preferred_cv_skills"] = self.compute_similarity(
+                    job_data.preferred_skills, cv_data.skills
+                )
+
+            # So khớp combined text
+            if job_data.combined_text and cv_data.combined_text:
+                semantic_scores["combined_text"] = self.compute_similarity(
+                    job_data.combined_text, cv_data.combined_text
+                )
+
+            # Thực hiện context-aware matching
+            context_score = self.match_with_context(job_data, cv_data)
+            semantic_scores["context_match"] = context_score
+
+            # Tính điểm khớp chính xác cho kỹ năng
+            exact_match_score = 0
+            if (
+                job_data.skills
+                and hasattr(cv_data, "extracted_skills")
+                and cv_data.extracted_skills
+            ):
+                exact_match_score = self.compute_exact_match_score(
+                    job_data.skills, cv_data.extracted_skills
+                )
+
+            # Tính điểm tổng hợp với trọng số động
+            weighted_score = 0
+            for key, weight in weights.items():
+                if key in semantic_scores:
+                    weighted_score += semantic_scores[key] * weight
+
+            # Kết hợp điểm semantic và exact match
+            final_score = weighted_score * 0.7 + exact_match_score * 0.3
+
+            # Chuẩn hóa điểm số để có phân phối tốt hơn
+            # Áp dụng sigmoid để điểm số nằm trong khoảng 0-1 và có phân phối tốt hơn
+            normalized_score = 1 / (1 + np.exp(-10 * (final_score - 0.5)))
+
+            # Tạo giải thích về kết quả đánh giá
+            match_scores = {
+                "match_score": normalized_score,
+                "semantic_score": weighted_score,
+                "exact_match_score": exact_match_score,
+                "detail_scores": semantic_scores,
+            }
+
+            match_analysis = self.generate_match_explanation(
+                job_data, cv_data, match_scores
+            )
+
+            # Lưu kết quả vào database
+            job_cv_match, created = JobCVMatch.objects.update_or_create(
+                job=job,
+                application=application if application_id else None,
                 defaults={
-                    "match_score": weighted_score,
-                    "detailed_scores": detailed_scores,
+                    "cv_processed_data": cv_data,
+                    "match_score": normalized_score,
+                    "detail_scores": semantic_scores,
+                    "match_details": {},
+                    "strengths": match_analysis["strengths"],
+                    "weaknesses": match_analysis["weaknesses"],
+                    "explanation": match_analysis["explanation"],
                 },
             )
 
-            return match
+            return job_cv_match
 
-        except JobProcessedData.DoesNotExist:
-            logger.error(f"JobProcessedData not found for job_id={job_id}")
-            return None
-        except CVProcessedData.DoesNotExist:
-            logger.error(
-                f"CVProcessedData not found for cv_id={cv_id} or application_id={application_id}"
-            )
-            return None
         except Exception as e:
-            logger.error(f"Error matching job and CV: {e}")
+            logger.error(f"Error in match_job_cv: {e}")
+            import traceback
+
+            logger.error(traceback.format_exc())
             return None
 
     def match_job_with_all_applications(self, job_id):
         """
-        So khớp một job với tất cả các CV đã apply cho job đó
+        Đánh giá độ phù hợp của job với tất cả application
         """
         try:
-            job_data = JobProcessedData.objects.get(job_id=job_id)
+            from jobs.models import Job
+            from application.models import JobApplication
 
-            # Lấy tất cả CV đã apply cho job này
-            cv_data_list = CVProcessedData.objects.filter(application__job_id=job_id)
+            # Lấy job
+            try:
+                job = Job.objects.get(id=job_id)
+            except Job.DoesNotExist:
+                logger.error(f"Job not found for job_id: {job_id}")
+                return []
+
+            # Lấy tất cả application cho job này
+            applications = JobApplication.objects.filter(job=job)
 
             results = []
-            for cv_data in cv_data_list:
-                # Tính toán điểm chi tiết
-                detailed_scores = self.compute_detailed_matching_scores(
-                    job_data, cv_data
-                )
-
-                # Tính điểm tổng hợp
-                weighted_score = self.compute_weighted_score(detailed_scores)
-
-                # Lưu kết quả vào cơ sở dữ liệu
-                match, created = JobCVMatch.objects.update_or_create(
-                    job=job_data.job,
-                    application=cv_data.application,
-                    defaults={
-                        "match_score": weighted_score,
-                        "detailed_scores": detailed_scores,
-                    },
-                )
-
-                results.append(match)
-
-            # Sắp xếp kết quả theo điểm từ cao đến thấp
-            results.sort(key=lambda x: x.match_score, reverse=True)
+            for application in applications:
+                # Thực hiện đánh giá độ phù hợp
+                match_result = self.match_job_cv(job_id, application_id=application.id)
+                if match_result:
+                    results.append(match_result)
 
             return results
 
-        except JobProcessedData.DoesNotExist:
-            logger.error(f"JobProcessedData not found for job_id={job_id}")
-            return []
         except Exception as e:
-            logger.error(f"Error matching job with all CVs: {e}")
+            logger.error(f"Error in match_job_with_all_applications: {e}")
+            import traceback
+
+            logger.error(traceback.format_exc())
             return []
