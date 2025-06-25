@@ -58,6 +58,7 @@ class CVProcessor:
                 "about me",
                 "personal statement",
                 "objective",
+                "career objective",
             ],
             "experience": [
                 "experience",
@@ -99,14 +100,29 @@ class CVProcessor:
                 "key projects",
                 "projects summary",
                 "project summary",
+                "project experience",
+                "highlighted projects",
             ],
             "certifications": [
                 "certifications",
                 "certificates",
                 "professional certifications",
             ],
-            "languages": ["languages", "language proficiency", "language skills"],
-            "achievements": ["achievements", "awards", "honors", "accomplishments"],
+            "languages": [
+                "language",
+                "languages",
+                "language proficiency",
+                "language skills",
+            ],
+            "achievements": [
+                "achievements",
+                "awards",
+                "honors",
+                "accomplishments",
+                "prizes",
+                "awards",
+                "prizes and awards",
+            ],
         }
 
         # Thêm định nghĩa section_mapping
