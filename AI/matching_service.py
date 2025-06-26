@@ -5,6 +5,9 @@ from sentence_transformers import SentenceTransformer, util
 import logging
 from django.conf import settings
 from .models import JobProcessedData, CVProcessedData, JobCVMatch
+import traceback
+from jobs.models import Job
+from application.models import JobApplication
 
 logger = logging.getLogger(__name__)
 
@@ -446,8 +449,6 @@ class MatchingService:
         So khớp job và CV, trả về điểm số và phân tích
         """
         try:
-            from jobs.models import Job
-            from application.models import JobApplication
 
             # Log để debug
             logger.info(
@@ -590,7 +591,6 @@ class MatchingService:
 
         except Exception as e:
             logger.error(f"Error in match_job_cv: {e}")
-            import traceback
 
             logger.error(traceback.format_exc())
             return None
@@ -600,8 +600,6 @@ class MatchingService:
         Đánh giá độ phù hợp của job với tất cả application
         """
         try:
-            from jobs.models import Job
-            from application.models import JobApplication
 
             # Lấy job
             try:
@@ -624,7 +622,6 @@ class MatchingService:
 
         except Exception as e:
             logger.error(f"Error in match_job_with_all_applications: {e}")
-            import traceback
 
             logger.error(traceback.format_exc())
             return []

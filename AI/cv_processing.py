@@ -70,6 +70,7 @@ class CVProcessor:
                 "work experiences",
                 "work history",
                 "experience summary",
+                "career history",
             ],
             "education": [
                 "education",
@@ -92,6 +93,7 @@ class CVProcessor:
                 "expertise",
                 "skills summary",
                 "tech stack",
+                "technical expertise",
             ],
             "projects": [
                 "projects",
