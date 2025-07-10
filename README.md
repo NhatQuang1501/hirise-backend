@@ -1,28 +1,28 @@
 # HiRise - Tech Job Platform Backend
 
-Hệ thống backend cho nền tảng tuyển dụng công nghệ HiRise, được xây dựng với Django và Python, tích hợp công nghệ AI để tối ưu hóa quá trình tuyển dụng.
+Backend system for the HiRise tech recruitment platform, built with Django and Python, integrating AI technology to optimize the recruitment process.
 
-## 🚀 Tính năng
+## 🚀 Features
 
-- Quản lý tin tuyển dụng và hồ sơ ứng viên
-- Xử lý và phân tích CV tự động
-- Đối sánh thông minh giữa CV và yêu cầu công việc
-- Hệ thống đánh giá độ phù hợp dựa trên AI
-- API RESTful cho frontend
-- Xác thực và phân quyền người dùng
+- Job posting and candidate profile management
+- Automated CV processing and analysis
+- Intelligent matching between CVs and job requirements
+- AI-based compatibility assessment system
+- RESTful API for frontend integration
+- Authentication and user authorization
 
-## 🛠️ Công nghệ sử dụng
+## 🛠️ Technologies
 
 - **Framework:** Django
-- **Cơ sở dữ liệu:** PostgreSQL
-- **Xử lý bất đồng bộ:** Celery
+- **Database:** PostgreSQL
+- **Asynchronous Processing:** Celery
 - **Cache:** Redis
 - **AI/ML:** SentenceTransformer, spaCy
-- **Xử lý file:** PyMuPDF, docx2txt
-- **Xác thực:** JWT
-- **Lưu trữ file:** Digital Ocean Spaces (S3-compatible)
+- **File Processing:** PyMuPDF, docx2txt
+- **Authentication:** JWT
+- **File Storage:** Digital Ocean Spaces (S3-compatible)
 
-## 📦 Cài đặt
+## 📦 Installation
 
 1. Clone repository:
 
@@ -31,7 +31,7 @@ git clone https://github.com/NhatQuang1501/hirise-backend.git
 cd hirise-backend
 ```
 
-2. Tạo và kích hoạt môi trường ảo:
+2. Create and activate virtual environment:
 
 ```bash
 python -m venv env
@@ -41,46 +41,45 @@ env\Scripts\activate
 source env/bin/activate
 ```
 
-3. Cài đặt các gói phụ thuộc:
+3. Install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-4. Cài đặt mô hình spaCy:
+4. Install spaCy model:
 
 ```bash
 python -m spacy download en_core_web_sm
 ```
 
-5. Khởi động server:
+5. Start the server:
 
 ```bash
 python manage.py runserver
 ```
 
-## 🔧 Cấu trúc dự án
+## 🔧 Project Structure
 
 ```
 backend/
-├── AI/                # Module xử lý AI
-│   ├── cv_processing.py     # Xử lý CV
-│   ├── job_processing.py    # Xử lý tin tuyển dụng
-│   ├── matching_service.py  # Dịch vụ đối sánh
-│   └── it_skills.txt        # Danh sách kỹ năng IT
-├── application/       # Module quản lý ứng tuyển
-├── digital_ocean_space/ # Cấu hình lưu trữ file
-├── hirise/            # Cấu hình chính của dự án
-├── jobs/              # Module quản lý tin tuyển dụng
-├── users/             # Module quản lý người dùng
-└── manage.py          # Script quản lý Django
+├── AI/                # AI processing module
+│   ├── cv_processing.py     # CV processing
+│   ├── job_processing.py    # Job posting processing
+│   ├── matching_service.py  # Matching service
+│   └── it_skills.txt        # IT skills list
+├── application/       # Application management module
+├── digital_ocean_space/ # File storage configuration
+├── hirise/            # Main project configuration
+├── jobs/              # Job posting management module
+├── users/             # User management module
+└── manage.py          # Django management script
 ```
 
+## 📊 AI Module
 
-## 📊 Module AI
+HiRise uses AI technology to analyze CVs and job postings:
 
-HiRise sử dụng công nghệ AI để phân tích CV và tin tuyển dụng:
-
-1. **CV Processor**: Trích xuất thông tin từ file PDF/DOCX, phân đoạn nội dung, nhận diện kỹ năng
-2. **JD Processor**: Phân tích yêu cầu công việc, trích xuất kỹ năng cần thiết
-3. **Matching Service**: So sánh độ tương đồng giữa CV và yêu cầu công việc
+1. **CV Processor**: Extracts information from PDF/DOCX files, segments content, identifies skills
+2. **JD Processor**: Analyzes job requirements, extracts necessary skills
+3. **Matching Service**: Compares similarity between CVs and job requirements
