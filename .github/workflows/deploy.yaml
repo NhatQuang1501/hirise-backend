@@ -1,0 +1,39 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ deploy ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Deploy to Server via SSH
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: ${{ secrets.SSH_PORT }}
+        script: |
+          cd /home/hirise/hirise-backend
+          git checkout deploy
+          git pull
+          source env/bin/activate
+          git diff HEAD^ HEAD requirements.txt > req.diff || true
+          if [ -s req.diff ]; then
+            pip install -r requirements.txt
+          else
+            echo "No dependency changes."
+          fi
+
+          python manage.py migrate
+          python manage.py collectstatic --noinput
+
+          sudo systemctl restart gunicorn
+          sudo systemctl restart nginx
+          sudo systemctl restart celery.service
