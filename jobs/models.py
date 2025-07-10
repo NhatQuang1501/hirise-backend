@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError
 
 class Location(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    address = models.TextField()  # Trường chính để lưu địa chỉ đầy đủ
+    address = models.TextField()  # Main field for full address
     country = models.CharField(max_length=100, blank=True, default="Vietnam")
     description = models.TextField(blank=True)
     city = models.CharField(max_length=100, blank=True, null=True)
@@ -90,7 +90,7 @@ class Job(models.Model):
     is_salary_negotiable = models.BooleanField(default=True)
     closed_date = models.DateField(blank=True, null=True)
 
-    # Thêm các liên kết
+    # Relationships
     locations = models.ManyToManyField(
         Location,
         related_name="jobs",
@@ -133,7 +133,7 @@ class Job(models.Model):
 class SavedJob(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="saved_by")
-    # Sử dụng string để tránh circular import
+    # Using string reference to avoid circular import
     applicant = models.ForeignKey(
         "users.ApplicantProfile", on_delete=models.CASCADE, related_name="saved_jobs"
     )

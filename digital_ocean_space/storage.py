@@ -19,6 +19,3 @@ class CustomMediaS3Storage(S3Boto3Storage):
             self.default_acl = "private"
 
         return super()._save(name, content)
-
-
-# class CustomStaticS3Storage(S3Boto3Storage):

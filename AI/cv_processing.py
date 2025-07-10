@@ -12,14 +12,14 @@ from sentence_transformers import SentenceTransformer
 from django.conf import settings
 from .models import CVProcessedData
 
-# Thiết lập logging
+# Setup logging
 logger = logging.getLogger(__name__)
 
-# Đường dẫn lưu trữ dữ liệu CV đã xử lý
+# Directory for processed CV data
 CV_DATA_DIR = os.path.join(settings.BASE_DIR, "AI", "cv_processed_data")
 os.makedirs(CV_DATA_DIR, exist_ok=True)
 
-# Tải mô hình ngôn ngữ spaCy
+# Load spaCy language model
 try:
     nlp = spacy.load("en_core_web_sm")
 except OSError:
@@ -29,19 +29,15 @@ except OSError:
 
 
 class CVProcessor:
-    """
-    Lớp xử lý CV data cho SBERT
-    """
-
     def __init__(self, model_name="all-MiniLM-L6-v2"):
-        # Khởi tạo SBERT model
+        # Initialize SBERT model
         try:
             self.model = SentenceTransformer(model_name)
         except Exception as e:
             logger.error(f"Error initializing SBERT model: {e}")
             self.model = None
 
-        # Tải danh sách kỹ năng IT
+        # Load IT skills list
         try:
             with open(os.path.join(settings.BASE_DIR, "AI", "it_skills.txt"), "r") as f:
                 self.it_skills = [line.strip().lower() for line in f.readlines()]
@@ -49,7 +45,7 @@ class CVProcessor:
             logger.error(f"Error loading IT skills list: {e}")
             self.it_skills = []
 
-        # Thêm định nghĩa section_patterns
+        # Define section patterns
         self.section_patterns = {
             "summary": [
                 "summary",
@@ -127,7 +123,7 @@ class CVProcessor:
             ],
         }
 
-        # Thêm định nghĩa section_mapping
+        # Section mapping for normalization
         self.section_mapping = {
             "summary": "summary",
             "profile": "summary",
@@ -152,9 +148,6 @@ class CVProcessor:
         }
 
     def extract_text_from_pdf(self, pdf_path):
-        """
-        Trích xuất văn bản từ file PDF
-        """
         try:
             text = ""
             with fitz.open(pdf_path) as doc:
@@ -166,9 +159,6 @@ class CVProcessor:
             return ""
 
     def extract_text_from_docx(self, docx_path):
-        """
-        Trích xuất văn bản từ file DOCX
-        """
         try:
             text = docx2txt.process(docx_path)
             return text
@@ -177,37 +167,31 @@ class CVProcessor:
             return ""
 
     def clean_text(self, text):
-        """
-        Làm sạch văn bản cơ bản
-        """
         if not text:
             return ""
 
-        # Loại bỏ các ký tự HTML
+        # Remove HTML tags
         text = re.sub(r"<.*?>", " ", text)
 
-        # Chuẩn hóa xuống dòng thành khoảng trắng
+        # Normalize line breaks
         text = re.sub(r"\s*\n\s*", " ", text)
 
-        # Chuẩn hóa dấu chấm câu (thêm khoảng trắng sau dấu chấm nếu chưa có)
+        # Normalize punctuation
         text = re.sub(r"\.(?=[A-Za-z])", ". ", text)
 
-        # Loại bỏ khoảng trắng thừa
+        # Remove extra whitespace
         text = re.sub(r"\s+", " ", text).strip()
 
         return text
 
     def advanced_preprocessing(self, text):
-        """
-        Tiền xử lý nâng cao cho văn bản IT
-        """
         if not text:
             return ""
 
-        # Chuẩn hóa cơ bản
+        # Basic cleaning
         text = self.clean_text(text)
 
-        # Xử lý từ viết tắt IT phổ biến
+        # Process IT abbreviations
         abbreviations = {
             r"\bjs\b": "javascript",
             r"\bts\b": "typescript",
@@ -240,7 +224,7 @@ class CVProcessor:
         for abbr, full in abbreviations.items():
             text = re.sub(abbr, full, text, flags=re.IGNORECASE)
 
-        # Chuẩn hóa tên công nghệ
+        # Normalize technology names
         tech_variants = {
             r"react\.?js": "react",
             r"node\.?js": "node",
@@ -277,474 +261,317 @@ class CVProcessor:
         return text
 
     def enhance_cv_section(self, text, section_name):
-        """
-        Tăng cường cấu trúc ngữ nghĩa của phần CV
-        """
         if not text:
             return ""
 
-        # Xử lý các mục bullet points
-        if "•" in text or "*" in text or "-" in text:
-            # Chuẩn hóa các ký tự bullet
-            text = re.sub(r"(?:^|\n)[\s]*[•\*\-][\s]+", "\n• ", text)
+        # Apply advanced preprocessing
+        text = self.advanced_preprocessing(text)
 
-            # Tách thành danh sách các điểm
-            bullet_points = re.split(r"\n•\s+", text)
-            bullet_points = [
-                self.clean_text(point) for point in bullet_points if point.strip()
+        # Extract sentences for better semantic understanding
+        doc = nlp(text)
+        sentences = [sent.text for sent in doc.sents]
+
+        # Format based on section type
+        if section_name == "skills":
+            # Extract skill phrases
+            skill_phrases = re.split(r"[,;•\n]|\s{2,}", text)
+            skill_phrases = [
+                phrase.strip() for phrase in skill_phrases if phrase.strip()
             ]
 
-            # Thêm ngữ cảnh từ tên section
-            enhanced_points = []
-            for point in bullet_points:
-                if point:
-                    enhanced_points.append(f"{section_name} includes: {point}")
+            # Format as a list
+            formatted_text = "\n".join([f"• {skill}" for skill in skill_phrases])
 
-            return " ".join(enhanced_points)
+        elif section_name in ["experience", "education"]:
+            # Keep paragraph structure but enhance readability
+            paragraphs = re.split(r"\n{2,}", text)
+            formatted_text = "\n\n".join(paragraphs)
 
-        # Nếu là phần skills, chuẩn hóa thành danh sách
-        if section_name.lower() == "skills":
-            skills = re.split(r"[,\n]", text)
-            skills = [skill.strip() for skill in skills if skill.strip()]
-            return f"Skills include: {', '.join(skills)}"
+        else:
+            # Default formatting for other sections
+            formatted_text = "\n".join(sentences)
 
-        # Xử lý phần education
-        if section_name.lower() == "education":
-            # Trích xuất thông tin học vấn quan trọng
-            degree_match = re.search(
-                r"([A-Za-z\s]+(?:TECHNOLOGY|ENGINEERING|SCIENCE|BUSINESS|ARTS|DEGREE|DIPLOMA))",
-                text,
-                re.IGNORECASE,
-            )
-            school_match = re.search(
-                r"(University|College|Institute|School)[\s\w]+", text, re.IGNORECASE
-            )
-            gpa_match = re.search(r"GPA:?\s*(\d+\.\d+)", text)
-
-            edu_parts = []
-            if degree_match:
-                edu_parts.append(f"Degree in {degree_match.group(1)}")
-            if school_match:
-                edu_parts.append(f"from {school_match.group(0)}")
-            if gpa_match:
-                edu_parts.append(f"with GPA {gpa_match.group(1)}")
-
-            if edu_parts:
-                return f"Education: {' '.join(edu_parts)}"
-
-        # Xử lý phần experience
-        if section_name.lower() == "experience":
-            # Trích xuất thông tin kinh nghiệm quan trọng
-            position_match = re.search(
-                r"(Developer|Engineer|Intern|Manager|Designer|Analyst|Consultant)\b",
-                text,
-                re.IGNORECASE,
-            )
-            company_match = re.search(r"at\s+([\w\s]+)", text, re.IGNORECASE)
-            years_match = re.search(r"(\d+)\s*(?:year|yr)s?", text, re.IGNORECASE)
-
-            exp_parts = []
-            if position_match:
-                exp_parts.append(f"Worked as {position_match.group(1)}")
-            if company_match:
-                exp_parts.append(f"at {company_match.group(1)}")
-            if years_match:
-                exp_parts.append(f"for {years_match.group(1)} years")
-
-            if exp_parts:
-                return f"Experience: {' '.join(exp_parts)}"
-
-        # Xử lý phần achievements
-        if section_name.lower() == "achievements":
-            achievements = re.split(r"\n+", text)
-            achievements = [ach.strip() for ach in achievements if ach.strip()]
-            if achievements:
-                return f"Achievements include: {'. '.join(achievements)}"
-
-        # Mặc định thêm tên section
-        return f"{section_name}: {self.clean_text(text)}"
+        return formatted_text
 
     def extract_cv_content(self, file_path):
-        """
-        Trích xuất nội dung CV từ file DOCX hoặc PDF
-        """
-        file_extension = os.path.splitext(file_path)[1].lower()
+        file_ext = os.path.splitext(file_path)[1].lower()
 
-        if file_extension == ".docx":
-            text = self.extract_text_from_docx(file_path)
-        elif file_extension == ".pdf":
-            text = self.extract_text_from_pdf(file_path)
+        if file_ext == ".pdf":
+            return self.extract_text_from_pdf(file_path)
+        elif file_ext == ".docx":
+            return self.extract_text_from_docx(file_path)
         else:
-            logger.error(f"Định dạng file không được hỗ trợ: {file_extension}")
-            return None
-
-        # Làm sạch văn bản
-        processed_text = self.clean_text(text)
-        return processed_text
+            logger.error(f"Unsupported file format: {file_ext}")
+            return ""
 
     def identify_sections_by_headings(self, text):
-        """
-        Phát hiện các phần trong CV dựa trên tiêu đề
-        """
-        # Tạo pattern để tìm kiếm các tiêu đề section
-        all_section_patterns = []
-        for section, patterns in self.section_patterns.items():
-            section_pattern = "|".join([re.escape(p) for p in patterns])
-            all_section_patterns.append(f"({section_pattern})")
+        if not text:
+            return {}
 
-        combined_pattern = "|".join(all_section_patterns)
+        # Split text into lines
+        lines = text.split("\n")
 
-        # Tìm tất cả tiêu đề section trong văn bản (không phân biệt chữ hoa/thường)
-        section_regex = re.compile(
-            r"(?:^|\n)(?:\s*)((?:" + combined_pattern + r")(?:\s*:|\s*\n|\s*$))",
-            re.IGNORECASE,
-        )
+        # Identify potential section headings
+        sections = {}
+        current_section = "other"
+        section_content = []
 
-        matches = list(section_regex.finditer(text))
-        if not matches:
-            return {"unknown": text}
+        for i, line in enumerate(lines):
+            line_text = line.strip().lower()
 
-        # Xác định vị trí bắt đầu của từng section
-        sections = []
-        for i, match in enumerate(matches):
-            section_title = match.group(1).strip().lower().rstrip(":")
+            # Check if this line is a section heading
+            is_heading = False
+            section_type = None
 
-            # Chuẩn hóa tên section
-            standard_section = self.get_standard_section_name(section_title)
+            # Check against section patterns
+            for section, patterns in self.section_patterns.items():
+                for pattern in patterns:
+                    # Match exact or with trailing colon or similar endings
+                    if re.match(
+                        rf"^{re.escape(pattern)}(\s*:|)$", line_text
+                    ) or re.match(rf"^{re.escape(pattern)}s(\s*:|)$", line_text):
+                        is_heading = True
+                        section_type = section
+                        break
+                if is_heading:
+                    break
 
-            start_pos = match.start()
-            end_pos = matches[i + 1].start() if i < len(matches) - 1 else len(text)
-
-            # Trích xuất nội dung section (loại bỏ tiêu đề)
-            content = text[match.end() : end_pos].strip()
-
-            sections.append({"title": standard_section, "content": content})
-
-        # Gộp các section cùng loại
-        result = {}
-        for section in sections:
-            if section["title"] in result:
-                result[section["title"]] += "\n" + section["content"]
+            # If heading found, save previous section and start new one
+            if is_heading and section_type:
+                if section_content:
+                    sections[current_section] = "\n".join(section_content)
+                current_section = section_type
+                section_content = []
             else:
-                result[section["title"]] = section["content"]
+                section_content.append(line)
 
-        return result
+        # Save the last section
+        if section_content:
+            sections[current_section] = "\n".join(section_content)
+
+        return sections
 
     def get_standard_section_name(self, section_title):
-        """
-        Chuẩn hóa tên section dựa trên từ điển ánh xạ
-        """
-        # Loại bỏ dấu hai chấm và khoảng trắng
-        clean_title = section_title.lower().strip().rstrip(":")
+        section_title = section_title.lower().strip()
 
-        # Kiểm tra từng từ khóa trong từ điển ánh xạ
-        for keyword, standard_name in self.section_mapping.items():
-            if keyword in clean_title:
-                return standard_name
+        # Direct match with section patterns
+        for section, patterns in self.section_patterns.items():
+            if section_title in patterns:
+                return section
 
-        # Nếu không tìm thấy, thử so sánh độ tương đồng
-        return self.find_most_similar_section(clean_title)
+        # Check for partial matches
+        for key_word, section in self.section_mapping.items():
+            if key_word in section_title:
+                return section
+
+        return "other"
 
     def find_most_similar_section(self, title):
-        """
-        Tìm section tương đồng nhất dựa trên độ tương đồng văn bản
-        """
-        # Tạo danh sách tất cả các pattern
-        all_patterns = []
+        title_lower = title.lower()
+
+        # Check direct matches first
         for section, patterns in self.section_patterns.items():
             for pattern in patterns:
-                all_patterns.append((section, pattern))
+                if pattern in title_lower or title_lower in pattern:
+                    return section
 
-        # Nếu không có pattern nào, trả về unknown
-        if not all_patterns:
-            return "unknown"
+        # Check for partial matches
+        best_match = None
+        highest_similarity = 0
 
-        # Tính độ tương đồng
-        max_similarity = 0
-        best_section = "unknown"
+        for section, patterns in self.section_patterns.items():
+            for pattern in patterns:
+                # Calculate simple word overlap similarity
+                pattern_words = set(pattern.split())
+                title_words = set(title_lower.split())
 
-        # Sử dụng spaCy để tính độ tương đồng
-        try:
-            title_doc = nlp(title)
-            for section, pattern in all_patterns:
-                pattern_doc = nlp(pattern)
-                similarity = title_doc.similarity(pattern_doc)
+                if pattern_words and title_words:
+                    common_words = pattern_words.intersection(title_words)
+                    similarity = len(common_words) / max(
+                        len(pattern_words), len(title_words)
+                    )
 
-                if (
-                    similarity > max_similarity and similarity > 0.7
-                ):  # Ngưỡng tương đồng
-                    max_similarity = similarity
-                    best_section = section
-        except Exception as e:
-            logger.error(f"Lỗi khi tính độ tương đồng: {e}")
+                    if similarity > highest_similarity:
+                        highest_similarity = similarity
+                        best_match = section
 
-        return best_section
+        # Return best match if similarity is above threshold
+        if highest_similarity > 0.3:
+            return best_match
+
+        return "other"
 
     def extract_skills_from_text(self, text):
-        """
-        Trích xuất kỹ năng từ văn bản
-        """
         if not text:
             return []
 
-        # Tải danh sách kỹ năng từ file
-        it_skills = []
-        skills_file = os.path.join(settings.BASE_DIR, "AI", "it_skills.txt")
+        # Apply advanced preprocessing
+        text = self.advanced_preprocessing(text.lower())
 
-        try:
-            if os.path.exists(skills_file):
-                with open(skills_file, "r", encoding="utf-8") as f:
-                    it_skills = [line.strip().lower() for line in f if line.strip()]
-            else:
-                # Ghi log nếu không tìm thấy file
-                logger.warning(f"Không tìm thấy file kỹ năng: {skills_file}")
-                # Tạo file trống nếu không tồn tại
-                os.makedirs(os.path.dirname(skills_file), exist_ok=True)
-                with open(skills_file, "w", encoding="utf-8") as f:
-                    f.write("")
-        except Exception as e:
-            logger.error(f"Lỗi khi đọc file kỹ năng: {e}")
+        extracted_skills = []
 
-        # Chuẩn bị văn bản
-        text_lower = text.lower()
+        # Extract skills from IT skills list
+        for skill in self.it_skills:
+            if re.search(r"\b" + re.escape(skill) + r"\b", text):
+                extracted_skills.append(skill)
 
-        # Xử lý các định dạng khác nhau của văn bản
-        lines = text.replace("\n", " \n ").split()
+        # Extract skills with experience levels
+        skill_levels = {}
 
-        # Tách theo các ký tự phân cách phổ biến
-        words = []
-        for line in lines:
-            parts = re.split(r"[,;:\n]", line)
-            words.extend([p.strip() for p in parts if p.strip()])
-
-        # Tìm các kỹ năng trong văn bản
-        found_skills = []
-
-        # Kiểm tra các kỹ năng từ it_skills
-        for skill in it_skills:
-            if re.search(r"\b" + re.escape(skill) + r"\b", text_lower):
-                if skill not in found_skills:
-                    found_skills.append(skill)
-
-        # Tìm các công nghệ tiềm năng từ các từ riêng lẻ
-        tech_keywords = []
-        for word in words:
-            word = word.strip(".,;:()[]{}")
-            # Tìm từ viết hoa hoặc có định dạng đặc biệt (như .NET, Node.js)
-            if re.match(r"^[A-Z][a-zA-Z0-9.]*(\.[a-zA-Z0-9]+)?$", word) or re.match(
-                r"^[a-zA-Z0-9]+\.[a-zA-Z0-9]+$", word
-            ):
-                tech_keywords.append(word)
-
-        # Thêm các từ khóa công nghệ tìm thấy
-        for keyword in tech_keywords:
-            if keyword.lower() not in [s.lower() for s in found_skills]:
-                found_skills.append(keyword)
-
-        # Kiểm tra các cụm từ đặc biệt
-        special_patterns = [
-            (r"\b[A-Z]+\b", []),  # Từ viết hoa hoàn toàn (ví dụ: HTML, CSS, PHP)
-            (r"\b[A-Za-z]+\+\+\b", []),  # Ngôn ngữ như C++
-            (r"\b[A-Za-z]+#\b", []),  # Ngôn ngữ như C#
-            (r"\b[A-Za-z]+\.[A-Za-z]+\b", []),  # Công nghệ như ASP.NET, Node.js
+        # Pattern for years of experience
+        experience_patterns = [
+            r"(\d+)(?:\+)?\s*(?:years?|yrs?)\s*(?:of)?\s*experience\s*(?:with|in|using)?\s*([a-zA-Z0-9#\+\.\s]+)",
+            r"([a-zA-Z0-9#\+\.\s]+)\s*(?:with)?\s*(\d+)(?:\+)?\s*(?:years?|yrs?)\s*(?:of)?\s*experience",
         ]
 
-        for pattern, _ in special_patterns:
-            matches = re.findall(pattern, text)
+        for pattern in experience_patterns:
+            matches = re.finditer(pattern, text)
             for match in matches:
-                if match.lower() not in [s.lower() for s in found_skills]:
-                    found_skills.append(match)
+                if len(match.groups()) >= 2:
+                    # Check if first group is years or skill based on pattern
+                    if match.group(1).isdigit():
+                        years = int(match.group(1))
+                        skill_text = match.group(2).strip().lower()
+                    else:
+                        skill_text = match.group(1).strip().lower()
+                        years = int(match.group(2))
 
-        # Chuẩn hóa danh sách kỹ năng tìm thấy
+                    # Clean up skill text
+                    skill_text = re.sub(r"\s+", " ", skill_text)
+
+                    # Check if this contains any known skills
+                    for skill in self.it_skills:
+                        if skill in skill_text:
+                            skill_levels[skill] = years
+                            if skill not in extracted_skills:
+                                extracted_skills.append(skill)
+
+        # Add experience level to skills
         final_skills = []
-        for skill in found_skills:
-            if len(skill) > 1:  # Loại bỏ các từ quá ngắn
+        for skill in extracted_skills:
+            if skill in skill_levels:
+                final_skills.append(f"{skill} ({skill_levels[skill]} years)")
+            else:
                 final_skills.append(skill)
 
-        return list(set(final_skills))  # Loại bỏ trùng lặp
+        return final_skills
 
     def process_cv(self, application):
-        """
-        Xử lý CV data và lưu trữ
-        """
         try:
-            # Thay đổi cách truy cập file CV
-            cv_file = application.cv_file
-
-            # Kiểm tra loại file
-            file_name = cv_file.name.lower()
-            if file_name.endswith(".pdf"):
-                # Tạo file tạm thời để xử lý PDF
-                with tempfile.NamedTemporaryFile(
-                    suffix=".pdf", delete=False
-                ) as temp_file:
-                    # Đọc nội dung file từ storage và ghi vào file tạm thời
-                    for chunk in cv_file.chunks():
-                        temp_file.write(chunk)
-                    temp_file_path = temp_file.name
-
-                # Trích xuất nội dung từ file PDF tạm thời
-                full_text = self.extract_text_from_pdf(temp_file_path)
-
-                # Xóa file tạm thời sau khi sử dụng
-                os.unlink(temp_file_path)
-
-            elif file_name.endswith(".docx"):
-                # Tạo file tạm thời để xử lý DOCX
-                with tempfile.NamedTemporaryFile(
-                    suffix=".docx", delete=False
-                ) as temp_file:
-                    # Đọc nội dung file từ storage và ghi vào file tạm thời
-                    for chunk in cv_file.chunks():
-                        temp_file.write(chunk)
-                    temp_file_path = temp_file.name
-
-                # Trích xuất nội dung từ file DOCX tạm thời
-                full_text = self.extract_text_from_docx(temp_file_path)
-
-                # Xóa file tạm thời sau khi sử dụng
-                os.unlink(temp_file_path)
-
-            else:
-                logger.error(f"Định dạng file không được hỗ trợ: {file_name}")
+            if not application.cv or not application.cv.file:
+                logger.error("No CV file found in application")
                 return None
 
-            if not full_text:
-                logger.error(f"Không thể trích xuất nội dung từ file CV: {file_name}")
-                return None
+            # Create a temporary file to process
+            with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+                temp_file_path = temp_file.name
 
-            # Phân tích các phần trong CV
-            sections = self.identify_sections_by_headings(full_text)
+                # Write CV content to temporary file
+                for chunk in application.cv.file.chunks():
+                    temp_file.write(chunk)
 
-            # Trích xuất kỹ năng
-            skills = []
-            if "skills" in sections:
-                skills = self.extract_skills_from_text(sections["skills"])
-            else:
-                # Nếu không có phần skills rõ ràng, tìm trong toàn bộ văn bản
-                skills = self.extract_skills_from_text(full_text)
+            try:
+                # Extract text from CV
+                cv_text = self.extract_cv_content(temp_file_path)
+                if not cv_text:
+                    logger.error("Failed to extract text from CV")
+                    return None
 
-            # Làm sạch và tăng cường ngữ nghĩa cho từng phần
-            enhanced_sections = {}
-            for section_name, content in sections.items():
-                if content:
-                    enhanced_sections[section_name] = self.enhance_cv_section(
-                        content, section_name.capitalize()
-                    )
+                # Clean and preprocess text
+                cv_text = self.clean_text(cv_text)
 
-            # Tạo dữ liệu cấu trúc
-            cv_data = {
-                "summary": sections.get("summary", ""),
-                "experience": sections.get("experience", ""),
-                "education": sections.get("education", ""),
-                "skills": sections.get("skills", ""),
-                "projects": sections.get("projects", ""),
-                "certifications": sections.get("certifications", ""),
-                "languages": sections.get("languages", ""),
-                "achievements": sections.get("achievements", ""),
-                "extracted_skills": skills,
-                "full_text": full_text,
-            }
+                # Identify sections
+                sections = self.identify_sections_by_headings(cv_text)
 
-            # Kết hợp các phần quan trọng cho SBERT với cấu trúc tốt hơn
-            important_sections = [
-                "summary",
-                "experience",
-                "education",
-                "skills",
-                "projects",
-                "achievements",
-            ]
-
-            combined_text_parts = []
-
-            # Thêm thông tin về kỹ năng trước tiên vì đây là phần quan trọng nhất
-            if skills:
-                combined_text_parts.append(
-                    f"Candidate has skills in: {', '.join(skills)}"
-                )
-
-            # Thêm các phần đã được tăng cường ngữ nghĩa
-            for section in important_sections:
-                if section in enhanced_sections and enhanced_sections[section]:
-                    combined_text_parts.append(enhanced_sections[section])
-
-            combined_text = " ".join(combined_text_parts)
-
-            if not combined_text:
-                combined_text = self.clean_text(full_text)
-
-            # Tạo hoặc cập nhật CVProcessedData
-            cv_processed_data, created = CVProcessedData.objects.update_or_create(
-                application=application,
-                defaults={
-                    "summary": cv_data["summary"],
-                    "experience": cv_data["experience"],
-                    "education": cv_data["education"],
-                    "skills": cv_data["skills"],
-                    "projects": cv_data["projects"],
-                    "certifications": cv_data["certifications"],
-                    "languages": cv_data["languages"],
-                    "achievements": cv_data["achievements"],
-                    "extracted_skills": cv_data["extracted_skills"],
-                    "full_text": cv_data["full_text"],
-                    "combined_text": combined_text,
-                },
-            )
-
-            # Tạo embedding nếu model đã được khởi tạo
-            if self.model:
-                # Tạo embedding cho toàn bộ văn bản
-                full_text_embedding = self.model.encode(full_text)
-
-                # Tạo embedding cho văn bản kết hợp
-                combined_text_embedding = self.model.encode(combined_text)
-
-                # Tạo embedding cho từng phần nếu có
-                section_embeddings = {}
-                for section in important_sections:
-                    if section in cv_data and cv_data[section]:
-                        section_embeddings[section] = self.model.encode(
-                            cv_data[section]
+                # Process sections
+                processed_sections = {}
+                for section_name, content in sections.items():
+                    if section_name != "other":
+                        processed_sections[section_name] = self.enhance_cv_section(
+                            content, section_name
                         )
 
-                # Lưu các embedding vào file
+                # Extract key information
+                summary = processed_sections.get("summary", "")
+                experience = processed_sections.get("experience", "")
+                education = processed_sections.get("education", "")
+                skills = processed_sections.get("skills", "")
+                projects = processed_sections.get("projects", "")
+                certifications = processed_sections.get("certifications", "")
+                achievements = processed_sections.get("achievements", "")
+
+                # Extract skills
+                extracted_skills = self.extract_skills_from_text(
+                    skills + " " + experience
+                )
+
+                # Extract experience details with years
+                experience_details = {}
+                skill_patterns = [
+                    re.escape(skill.split(" (")[0]) for skill in extracted_skills
+                ]
+
+                for skill in extracted_skills:
+                    base_skill = skill.split(" (")[0]
+                    if " (" in skill and "year" in skill.lower():
+                        years_match = re.search(r"\((\d+)", skill)
+                        if years_match:
+                            experience_details[base_skill] = int(years_match.group(1))
+
+                # Create combined text for embedding
+                combined_text = f"{summary} {experience} {education} {skills}"
+
+                # Generate embeddings
+                full_text_embedding = self.model.encode(cv_text)
+                combined_text_embedding = self.model.encode(combined_text)
+
+                # Generate section embeddings
+                section_embeddings = {}
+                for section_name, content in processed_sections.items():
+                    if content.strip():
+                        section_embeddings[section_name] = self.model.encode(content)
+
+                # Save embeddings to file
                 embeddings = {
                     "full_text": full_text_embedding.tolist(),
                     "combined_text": combined_text_embedding.tolist(),
                     "sections": {k: v.tolist() for k, v in section_embeddings.items()},
                 }
 
-                embedding_filename = f"cv_{application.id}.json"
+                embedding_filename = f"cv_{application.cv.id}.json"
                 embedding_path = os.path.join(CV_DATA_DIR, embedding_filename)
 
-                # Debug
-                logger.info(f"Saving CV embedding to: {embedding_path}")
+                with open(embedding_path, "w") as f:
+                    json.dump(embeddings, f)
 
-                # Kiểm tra thư mục tồn tại
-                os.makedirs(os.path.dirname(embedding_path), exist_ok=True)
+                # Save processed data to database
+                cv_data, created = CVProcessedData.objects.update_or_create(
+                    cv=application.cv,
+                    defaults={
+                        "summary": summary,
+                        "experience": experience,
+                        "education": education,
+                        "skills": skills,
+                        "projects": projects,
+                        "certifications": certifications,
+                        "extracted_skills": extracted_skills,
+                        "experience_details": experience_details,
+                        "achievements": achievements,
+                    },
+                )
 
-                with open(embedding_path, "w", encoding="utf-8") as f:
-                    json.dump(embeddings, f, ensure_ascii=False)
-                    logger.info(
-                        f"Successfully saved CV embedding for application {application.id}"
-                    )
-
-                # Cập nhật đường dẫn file
-                cv_processed_data.embedding_file = embedding_filename
-                cv_processed_data.save()
-
-            return cv_processed_data
+                return cv_data
+            finally:
+                # Clean up temporary file
+                if os.path.exists(temp_file_path):
+                    os.unlink(temp_file_path)
 
         except Exception as e:
-            logger.error(f"Lỗi khi xử lý CV: {e}")
+            logger.error(f"Error processing CV: {e}")
             logger.error(traceback.format_exc())
             return None
 
 
 def process_cv_on_application(application):
-    """
-    Hàm được gọi khi có ứng viên nộp đơn
-    """
     processor = CVProcessor()
     return processor.process_cv(application)

@@ -8,7 +8,7 @@ import os
 
 class JobApplication(models.Model):
     """
-    Mô hình lưu trữ thông tin ứng tuyển của ứng viên vào công việc
+    Model for storing job application information
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -46,7 +46,7 @@ class JobApplication(models.Model):
         return os.path.basename(self.cv_file.name)
 
     def delete(self, *args, **kwargs):
-        # Xóa file CV khi xóa application
+        # Delete CV file when application is deleted
         if self.cv_file:
             storage = self.cv_file.storage
             if storage.exists(self.cv_file.name):
@@ -56,7 +56,7 @@ class JobApplication(models.Model):
 
 class CVAnalysis(models.Model):
     """
-    Mô hình lưu trữ kết quả phân tích CV
+    Model for storing CV analysis results
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -76,7 +76,7 @@ class CVAnalysis(models.Model):
 
 class InterviewSchedule(models.Model):
     """
-    Mô hình lưu trữ lịch phỏng vấn
+    Model for storing interview schedules
     """
 
     application = models.OneToOneField(
@@ -95,7 +95,7 @@ class InterviewSchedule(models.Model):
 # Test upload file
 class TestFileUpload(models.Model):
     """
-    Mô hình test upload file lên storage
+    Model for testing file uploads to storage
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -110,7 +110,7 @@ class TestFileUpload(models.Model):
         return os.path.basename(self.file.name)
 
     def delete(self, *args, **kwargs):
-        # Xóa file khi xóa object
+        # Delete file when object is deleted
         if self.file:
             storage = self.file.storage
             if storage.exists(self.file.name):
